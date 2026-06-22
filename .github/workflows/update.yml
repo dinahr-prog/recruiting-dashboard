@@ -1,0 +1,35 @@
+name: Update Recruiting Dashboard
+
+on:
+  schedule:
+    - cron: '0 * * * *'   # щогодини
+  workflow_dispatch:        # також можна запустити вручну з GitHub UI
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Fetch data & build index.html
+        env:
+          PEOPLEFORCE_API_KEY: ${{ secrets.PEOPLEFORCE_API_KEY }}
+        run: python fetch_data.py
+
+      - name: Commit & push updated index.html
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet || git commit -m "chore: update dashboard data $(date -u '+%Y-%m-%d %H:%M UTC')"
+          git push
