@@ -94,22 +94,31 @@ for vid in vac_ids:
         time.sleep(0.1)
 print(f"  Loaded {len(apps_raw)} applications")
 
-# ── 4. Candidates → source map ──────────────────────────────────────
-print("Fetching candidates (source mapping)...")
-source_map = {}
+# ── 4. Candidates → source + recruiter map ─────────────────────────
+print("Fetching candidates (source + recruiter mapping)...")
+source_map    = {}  # candidate_id → source string
+recruiter_map = {}  # candidate_id → recruiter name
 candidates = fetch_all_pages("recruitment/candidates", per_page=100, max_pages=40)
 for c in candidates:
-    source_map[str(c["id"])] = (c.get("source") or "").strip()
-print(f"  Mapped {len(source_map)} candidates")
+    cid = str(c["id"])
+    source_map[cid] = (c.get("source") or "").strip()
+    cb = c.get("created_by") or {}
+    if cb:
+        first = cb.get("first_name") or ""
+        last  = cb.get("last_name")  or ""
+        recruiter_map[cid] = f"{first} {last}".strip() or cb.get("email", "Unknown")
+print(f"  Mapped {len(source_map)} candidates, {len(recruiter_map)} with recruiter info")
 
-# ── 5. Build APPS list with source ─────────────────────────────────
+# ── 5. Build APPS list with source + recruiter ──────────────────────
 apps_js = []
 for a in apps_raw:
+    cid = str(a["applicant_id"])
     apps_js.append({
         "id":  a["app_id"],
         "vid": a["vac_id"],
         "sn":  a["stage_name"],
-        "src": source_map.get(str(a["applicant_id"]), ""),
+        "src": source_map.get(cid, ""),
+        "rec": recruiter_map.get(cid, ""),
         "ca":  a["created_at"],
     })
 
@@ -127,6 +136,10 @@ if "__RECRUITING_DATA__" not in template:
     raise ValueError("Placeholder __RECRUITING_DATA__ not found in template.html")
 
 html = template.replace("__RECRUITING_DATA__", data_block)
+
+from datetime import datetime, timezone
+build_time = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+html = html.replace("__BUILD_TIME__", build_time)
 
 with open("index.html", "w", encoding="utf-8") as f:
     f.write(html)

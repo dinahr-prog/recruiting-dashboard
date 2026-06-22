@@ -129,8 +129,10 @@ h2{font-size:15px;font-weight:700;margin-bottom:14px;}
     </div>
   </div>
   <div style="display:flex;align-items:center;gap:14px">
-    <span style="font-size:11px;color:var(--text2)">22.06.2026</span>
-    <div class="live-badge"><div class="dot"></div>PeopleForce Live</div>
+    <div style="text-align:right">
+      <div class="live-badge"><div class="dot"></div>PeopleForce Live</div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px">Оновлено: __BUILD_TIME__</div>
+    </div>
   </div>
 </header>
 
@@ -164,12 +166,14 @@ h2{font-size:15px;font-weight:700;margin-bottom:14px;}
     <div class="tab active" onclick="showTab('overview')">Всі вакансії</div>
     <div class="tab" onclick="showTab('funnel')">Воронка</div>
     <div class="tab" onclick="showTab('sources')">Джерела</div>
+    <div class="tab" onclick="showTab('recruiters')">Рекрутери</div>
     <div class="tab" onclick="showTab('bottlenecks')">Вузькі місця</div>
   </div>
 
   <div class="panel active" id="tab-overview"></div>
   <div class="panel" id="tab-funnel"></div>
   <div class="panel" id="tab-sources"></div>
+  <div class="panel" id="tab-recruiters"></div>
   <div class="panel" id="tab-bottlenecks"></div>
 </main>
 </div>
@@ -200,7 +204,7 @@ let dateTo   = null;
 let currentVacId = (VACS.find(v=>v.state==='opened')||VACS[0]).id;
 let sortCol  = 'total';
 let sortDir  = -1;
-let stateFilter = 'all';
+let stateFilter = 'opened';
 let currentTab = 'overview';
 
 // ---- PERIOD ----
@@ -262,7 +266,7 @@ function buildSummary() {
 function buildSidebar() {
   const opened = VACS.filter(v=>v.state==='opened');
   const closed = VACS.filter(v=>v.state!=='opened');
-  const item = v => `<div class="vac-item ${v.id===currentVacId?'active':''}" onclick="selectVac(${v.id})">
+  const item = v => `<div class="vac-item ${v.id===currentVacId?'active':''}" onclick="selectVac(${v.id});showTab('funnel')">
     <div class="sdot s-${v.state}"></div>
     <div class="vac-name">${v.title}</div>
     <div class="vac-cnt">${v.appCount||0}</div>
@@ -375,7 +379,6 @@ function buildFunnel(vacId) {
     const isEmpty = cnt===0;
     const pct = isEmpty ? 100 : (cnt/maxCount)*100;
     let color = isReject(name)?'var(--red)':isHired(name)?'var(--green)':stageColor(colorIdx++);
-    const ofTotal = total>0 ? `${((cnt/total)*100).toFixed(0)}%` : '';
     if (isEmpty) {
       return `<div class="stage-row">
         <div class="s-label empty">${name}</div>
@@ -387,7 +390,7 @@ function buildFunnel(vacId) {
       <div class="s-label">${name}</div>
       <div class="bar-wrap">
         <div class="bar-fill" style="width:${pct}%;background:${color}">
-          ${pct>18?ofTotal:''}
+          ${pct>18?cnt:''}
         </div>
       </div>
       <div class="s-cnt">${cnt}</div>
@@ -472,10 +475,161 @@ function buildSources() {
             </div>
           </div>
           ${total===0?`<div class="alert-box alert-info"><span>ℹ️</span><div>Немає аплікацій за обраний період. Розширте діапазон дат.</div></div>`:''}
-          ${top&&top[0]==='Telegram'&&total>0&&(top[1]/total)>0.5?`<div class="alert-box alert-info"><span>⚠️</span><div style="font-size:11px"><strong style="color:var(--yellow)">Рекомендація:</strong> Telegram домінує (${((top[1]/total)*100).toFixed(0)}%). Розгляньте збільшення частки Djinni та LinkedIn для технічних ролей.</div></div>`:''}
+          <div style="background:rgba(79,142,247,.07);border:1px solid rgba(79,142,247,.2);border-radius:7px;padding:12px">
+            <div style="font-size:11px;font-weight:600;color:var(--accent);margin-bottom:8px">🎯 Фокус найму: Media Buyer</div>
+            <div style="font-size:11px;color:var(--text2);display:flex;flex-direction:column;gap:6px;line-height:1.5">
+              <div>• <strong>Djinni + LinkedIn Researcher</strong> — найвища якість сеньорів. Пріоритизуйте аутрич через ресечерів, а не лише вхідні заявки.</div>
+              <div>• <strong>Telegram</strong> дає об'єм, але більший відсів на CV review. Ефективний для junior/middle.</div>
+              <div>• <strong>Рекомендації від команди</strong> — найменше кандидатів, але найвища конверсія в hire. Активуйте реферальну програму.</div>
+              <div>• <strong>Work.ua / Rabota.ua</strong> — рідко дають сеньорів у performance marketing. Можна скоротити бюджет на ці платформи.</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>`;
+}
+
+// ---- RECRUITERS ----
+function buildRecruiters() {
+  const {from, to} = periodDates();
+  const apps = APPS.filter(a => a.ca >= from && a.ca <= to && a.rec);
+
+  // Group by recruiter
+  const recMap = {};
+  apps.forEach(a => {
+    const r = a.rec || 'Невідомо';
+    if (!recMap[r]) recMap[r] = {name:r, total:0, hired:0, rejected:0, active:0, vacs:new Set(), byWeek:{}};
+    recMap[r].total++;
+    if (isHired(a.sn))  recMap[r].hired++;
+    else if (isReject(a.sn)) recMap[r].rejected++;
+    else recMap[r].active++;
+    recMap[r].vacs.add(a.vid);
+    // group by week
+    const week = weekLabel(a.ca);
+    recMap[r].byWeek[week] = (recMap[r].byWeek[week] || 0) + 1;
+  });
+
+  const recruiters = Object.values(recMap).sort((a,b) => b.total - a.total);
+  if (!recruiters.length) {
+    document.getElementById('tab-recruiters').innerHTML = `<h2>Активність рекрутерів</h2><div style="color:var(--text3);padding:20px">Немає даних за обраний період — спробуйте розширити діапазон дат.</div>`;
+    return;
+  }
+
+  // Collect all weeks in period for timeline
+  const allWeeks = collectWeeks(from, to);
+  const REC_PALETTE = ['#4f8ef7','#22c55e','#f59e0b','#7c3aed','#06b6d4','#f97316','#ec4899','#10b981'];
+
+  const cards = recruiters.map((r, i) => {
+    const conv    = r.total > 0 ? ((r.hired / r.total) * 100).toFixed(0) : 0;
+    const rejRate = r.total > 0 ? ((r.rejected / r.total) * 100).toFixed(0) : 0;
+    const color   = REC_PALETTE[i % REC_PALETTE.length];
+    const maxW    = Math.max(...allWeeks.map(w => r.byWeek[w] || 0), 1);
+
+    const weekBars = allWeeks.map(w => {
+      const cnt = r.byWeek[w] || 0;
+      const h   = maxW > 0 ? Math.round((cnt / maxW) * 40) : 0;
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:2px;flex:1;min-width:0">
+        <div style="font-size:8px;color:var(--text3)">${cnt > 0 ? cnt : ''}</div>
+        <div style="width:100%;height:40px;display:flex;align-items:flex-end">
+          <div style="width:100%;height:${h}px;background:${color};border-radius:2px 2px 0 0;opacity:.85;transition:height .3s"></div>
+        </div>
+        <div style="font-size:8px;color:var(--text3);writing-mode:vertical-rl;transform:rotate(180deg);max-height:36px;overflow:hidden">${w}</div>
+      </div>`;
+    }).join('');
+
+    return `<div style="background:var(--bg2);border:1px solid var(--border);border-left:3px solid ${color};border-radius:9px;padding:16px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:14px;font-weight:700">${r.name}</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">${r.vacs.size} вакансій · ${r.total} аплікацій за період</div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <span class="pill p-b">${r.active} активних</span>
+          <span class="pill p-g">${r.hired} hired</span>
+          <span class="pill p-r">${r.rejected} rejected</span>
+        </div>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
+        <div style="background:var(--bg3);border-radius:7px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:${color}">${r.total}</div>
+          <div style="font-size:10px;color:var(--text3)">Всього</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--green)">${conv}%</div>
+          <div style="font-size:10px;color:var(--text3)">Conversion</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--red)">${rejRate}%</div>
+          <div style="font-size:10px;color:var(--text3)">Reject rate</div>
+        </div>
+        <div style="background:var(--bg3);border-radius:7px;padding:10px;text-align:center">
+          <div style="font-size:20px;font-weight:700;color:var(--accent)">${r.vacs.size}</div>
+          <div style="font-size:10px;color:var(--text3)">Вакансій</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--text3);margin-bottom:6px;font-weight:600;text-transform:uppercase;letter-spacing:.5px">Активність по тижнях</div>
+      <div style="display:flex;gap:2px;align-items:flex-end;height:70px;padding-bottom:20px">${weekBars}</div>
+    </div>`;
+  }).join('');
+
+  // Summary comparison table
+  const tableRows = recruiters.map((r,i) => {
+    const color = REC_PALETTE[i % REC_PALETTE.length];
+    const conv  = r.total > 0 ? ((r.hired/r.total)*100).toFixed(0) : 0;
+    const barW  = recruiters[0].total > 0 ? ((r.total/recruiters[0].total)*100).toFixed(0) : 0;
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:10px;height:10px;border-radius:50%;background:${color};flex-shrink:0"></div>
+        <span style="font-weight:600;font-size:12px">${r.name}</span>
+      </div></td>
+      <td>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div style="flex:1;height:6px;background:var(--bg3);border-radius:3px;min-width:60px">
+            <div style="height:100%;width:${barW}%;background:${color};border-radius:3px"></div>
+          </div>
+          <span style="font-weight:700;font-size:12px">${r.total}</span>
+        </div>
+      </td>
+      <td style="color:var(--green);font-weight:600">${r.hired}</td>
+      <td style="color:var(--red);font-weight:600">${r.rejected}</td>
+      <td style="color:var(--accent);font-weight:600">${r.active}</td>
+      <td><span class="pill ${+conv>=20?'p-g':+conv>=5?'p-y':'p-gr'}">${conv}%</span></td>
+      <td style="font-size:11px;color:var(--text3)">${r.vacs.size}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('tab-recruiters').innerHTML = `
+    <h2>Активність рекрутерів</h2>
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px;overflow-x:auto">
+      <table class="ot">
+        <thead><tr>
+          <th>Рекрутер</th><th>Аплікацій</th><th>Hired</th><th>Rejected</th><th>Активних</th><th>Conversion</th><th>Вакансій</th>
+        </tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:16px">${cards}</div>`;
+}
+
+// ── week helpers ──
+function weekLabel(dateStr) {
+  if (!dateStr) return '?';
+  const d = new Date(dateStr);
+  const mon = new Date(d); mon.setDate(d.getDate() - d.getDay() + 1);
+  return `${String(mon.getDate()).padStart(2,'0')}.${String(mon.getMonth()+1).padStart(2,'0')}`;
+}
+
+function collectWeeks(from, to) {
+  const weeks = [];
+  const start = new Date(from);
+  start.setDate(start.getDate() - start.getDay() + 1); // Monday
+  const end = new Date(to);
+  let cur = new Date(start);
+  while (cur <= end && weeks.length < 26) {
+    weeks.push(`${String(cur.getDate()).padStart(2,'0')}.${String(cur.getMonth()+1).padStart(2,'0')}`);
+    cur.setDate(cur.getDate() + 7);
+  }
+  return weeks;
 }
 
 // ---- BOTTLENECKS ----
@@ -493,24 +647,49 @@ function buildBottlenecks() {
     return {v,total,rejected,hired,stagnant,rejRate,bigRej};
   }).sort((a,b)=>b.rejRate-a.rejRate);
 
+  // Senior specialist advice по етапу відсіву
+  const seniorAdvice = {
+    'Reject after CV review':    'CV review: для сеньора перевіряйте конкретні цифри — обсяги бюджетів, гео, вертикалі. Відсутність кейсів з ROI/ROAS у резюме — червоний прапорець.',
+    'Reject after Pre-screen':   'Pre-screen: уточнюйте реальний досвід з конкретними інструментами (трекери, антидетект, spy-tools). Сеньори без розуміння технічної інфраструктури рідко закриваються.',
+    'Reject after interview':    'Interview: перевіряйте мислення в нестандартних ситуаціях — як реагує на зупинку трафіку, бан акаунтів, зміну алгоритмів. Soft skills не менш важливі за hard.',
+    'Reject after TL interview': 'TL interview: Team Lead оцінює культурний fit і самостійність. Якщо відсів тут — можливо, завищені очікування по рівню або кандидат звик до іншої структури команди.',
+    'Polygraph reject':          'Polygraph: якщо відсів на полiграфі — варто перевірити чи всі кандидати проінформовані заздалегідь. Частина сеньорів відмовляється через принципову позицію.',
+    'Offer reject':              'Offer reject: сеньори порівнюють офери. Уточнюйте очікування по компенсації на pre-screen, щоб не витрачати ресурс команди на нерелевантні переговори.',
+    'Refused':                   'Кандидат відмовився сам: зберіть фідбек — причина може бути в темпі процесу, умовах або альтернативному офері. Корисно для покращення EVP.',
+  };
+  const getAdvice = (stageName) => {
+    if (!stageName) return null;
+    for (const [key, advice] of Object.entries(seniorAdvice)) {
+      if (stageName.toLowerCase().includes(key.toLowerCase())) return advice;
+    }
+    if (/reject|refus/i.test(stageName)) return 'Зафіксуйте причину відмови в коментарі до кандидата — це допоможе виявити патерни після набору статистики.';
+    return null;
+  };
+
   const cards = items.map(({v,total,rejected,hired,stagnant,rejRate,bigRej})=>{
-    const sev = rejRate>60?'red':rejRate>30?'yellow':'green';
-    return `<div class="bn-card" style="border-color:${sev==='red'?'rgba(239,68,68,.4)':sev==='yellow'?'rgba(245,158,11,.35)':'rgba(34,197,94,.3)'}" onclick="selectVac(${v.id});showTab('funnel')">
-      <div class="bn-title">${{red:'🔴',yellow:'🟡',green:'🟢'}[sev]} ${v.title}</div>
+    // Колір лише якщо достатньо даних (≥5 аплік) і явна проблема
+    const hasData = total >= 5;
+    const sev = !hasData ? 'neutral' : hired >= 1 ? 'neutral' : stagnant >= total * 0.5 ? 'yellow' : 'neutral';
+    const borderColor = sev==='yellow' ? 'rgba(245,158,11,.35)' : 'var(--border)';
+    const icon = hired > 0 ? '✅' : stagnant >= 3 ? '⏳' : '📋';
+    const advice = getAdvice(bigRej?.[0]);
+    return `<div class="bn-card" style="border-color:${borderColor}" onclick="selectVac(${v.id});showTab('funnel')">
+      <div class="bn-title">${icon} ${v.title}</div>
       <div class="bn-dept">${v.dept}</div>
       <div class="bn-row">
         <div class="bn-stat"><div class="bn-stat-v" style="color:var(--accent)">${total}</div><div class="bn-stat-l">Всього</div></div>
         <div class="bn-stat"><div class="bn-stat-v" style="color:var(--red)">${rejected}</div><div class="bn-stat-l">Rejected</div></div>
         <div class="bn-stat"><div class="bn-stat-v" style="color:var(--green)">${hired}</div><div class="bn-stat-l">Hired</div></div>
       </div>
-      ${bigRej?`<div class="bn-note bn-red">🔴 Вузьке місце: <strong>${bigRej[0]}</strong> — ${bigRej[1]} осіб</div>`:''}
-      ${stagnant>=3?`<div class="bn-note bn-yel" style="margin-top:4px">⚠️ ${stagnant} кандидатів застрягли на початку</div>`:''}
-      ${total===0?`<div class="bn-note" style="background:var(--bg3);color:var(--text3)">Немає аплікацій за цей період</div>`:''}
+      ${bigRej ? `<div class="bn-note bn-red" style="margin-bottom:4px">Найбільший відсів: <strong>${bigRej[0]}</strong> — ${bigRej[1]} осіб</div>` : ''}
+      ${advice ? `<div class="bn-note" style="background:rgba(79,142,247,.07);border:1px solid rgba(79,142,247,.15);color:var(--text2);margin-top:4px">💡 ${advice}</div>` : ''}
+      ${stagnant>=3 ? `<div class="bn-note bn-yel" style="margin-top:4px">⏳ ${stagnant} кандидатів ще не відпрацьовані</div>` : ''}
+      ${total===0 ? `<div class="bn-note" style="background:var(--bg3);color:var(--text3)">Немає аплікацій за цей період</div>` : ''}
     </div>`;
   }).join('');
   document.getElementById('tab-bottlenecks').innerHTML = `
     <h2>Вузькі місця — Відкриті вакансії</h2>
-    <p style="font-size:11px;color:var(--text2);margin-bottom:14px">Дані фільтруються за обраним вище періодом. Клік → воронка вакансії.</p>
+    <p style="font-size:11px;color:var(--text2);margin-bottom:14px">Дані фільтруються за обраним вище періодом. Клік → воронка вакансії. Поради базуються на етапі найбільшого відсіву.</p>
     <div class="bn-grid">${cards||'<div style="color:var(--text3)">Немає відкритих вакансій</div>'}</div>`;
 }
 
@@ -520,10 +699,13 @@ function showTab(name) {
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
-  ['overview','funnel','sources','bottlenecks'].forEach((n,i)=>{
+  ['overview','funnel','sources','recruiters','bottlenecks'].forEach((n,i)=>{
     if(n===name) document.querySelectorAll('.tab')[i].classList.add('active');
   });
-  if (name==='funnel') buildFunnel(currentVacId);
+  if (name==='funnel')      buildFunnel(currentVacId);
+  if (name==='recruiters')  buildRecruiters();
+  if (name==='sources')     buildSources();
+  if (name==='bottlenecks') buildBottlenecks();
 }
 
 function selectVac(id) {
@@ -535,11 +717,11 @@ function selectVac(id) {
 function refreshAll() {
   buildSummary();
   buildSidebar();
-  if (currentTab==='overview')     buildOverview();
-  if (currentTab==='funnel')       buildFunnel(currentVacId);
-  if (currentTab==='sources')      buildSources();
-  if (currentTab==='bottlenecks')  buildBottlenecks();
-  buildOverview(); // always keep data fresh
+  buildOverview();
+  if (currentTab==='funnel')      buildFunnel(currentVacId);
+  if (currentTab==='sources')     buildSources();
+  if (currentTab==='recruiters')  buildRecruiters();
+  if (currentTab==='bottlenecks') buildBottlenecks();
 }
 
 // ---- INIT ----
@@ -547,6 +729,7 @@ setPeriod(4);
 buildOverview();
 buildFunnel(currentVacId);
 buildSources();
+buildRecruiters();
 buildBottlenecks();
 </script>
 </body>
