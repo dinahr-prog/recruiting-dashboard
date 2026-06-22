@@ -269,7 +269,7 @@ function buildSummary() {
   document.getElementById('sumGrid').innerHTML = `
     <div class="scard c-blue"><div class="scard-lbl">Вакансій відкрито</div><div class="scard-val">${openVacs}</div><div class="scard-sub">із ${VACS.length} всього</div></div>
     <div class="scard"><div class="scard-lbl">Аплікацій за період</div><div class="scard-val">${total}</div><div class="scard-sub">з ${APPS.length} загалом</div></div>
-    <div class="scard c-green"><div class="scard-lbl">Найнято / Offer</div><div class="scard-val">${hired}</div><div class="scard-sub">${total>0?((hired/total)*100).toFixed(1):0}% conversion</div></div>
+    <div class="scard c-green"><div class="scard-lbl">Найнято / Offer</div><div class="scard-val">${hired}</div><div class="scard-sub">за обраний період</div></div>
     <div class="scard c-red"><div class="scard-lbl">Rejected</div><div class="scard-val">${rejected}</div><div class="scard-sub">${total>0?((rejected/total)*100).toFixed(1):0}% reject rate</div></div>`;
 }
 
@@ -321,7 +321,6 @@ function renderTable() {
     {k:'hired',  lbl:'Найнято'},
     {k:'rejected',lbl:'Rejected'},
     {k:'active', lbl:'Активних'},
-    {k:'convRate',lbl:'Conversion'},
     {k:'rejRate', lbl:'Reject %'},
   ];
   const thArr = (k) => sortCol===k ? (sortDir>0?'↑':'↓') : '⇅';
@@ -336,7 +335,6 @@ function renderTable() {
       <td style="color:var(--green);font-weight:600">${hired}</td>
       <td style="color:var(--red);font-weight:600">${rejected}</td>
       <td style="color:var(--accent);font-weight:600">${active}</td>
-      <td>${convRate}%<div class="hbar"><div class="hfill" style="width:${Math.min(100,convRate*3)}%;background:var(--green)"></div></div></td>
       <td>${rejRate}%<div class="hbar"><div class="hfill" style="width:${Math.min(100,rejRate)}%;background:var(--red)"></div></div></td>
     </tr>`;
   }).join('');
@@ -436,7 +434,7 @@ function buildFunnel(vacId) {
     </div>
     <div class="fun-stats">
       <div class="fs-card"><div class="fs-val" style="color:var(--accent)">${total}</div><div class="fs-lbl">Аплікацій за період</div></div>
-      <div class="fs-card"><div class="fs-val" style="color:var(--green)">${hired} <span style="font-size:12px">(${conv}%)</span></div><div class="fs-lbl">Hired / Offer accepted</div></div>
+      <div class="fs-card"><div class="fs-val" style="color:var(--green)">${hired}</div><div class="fs-lbl">Hired / Offer accepted</div></div>
       <div class="fs-card"><div class="fs-val" style="color:var(--red)">${rejected}</div><div class="fs-lbl">Rejected</div></div>
     </div>
     ${alerts}
@@ -566,8 +564,8 @@ function buildRecruiters() {
           <div style="font-size:10px;color:var(--text3)">Всього</div>
         </div>
         <div style="background:var(--bg3);border-radius:7px;padding:10px;text-align:center">
-          <div style="font-size:20px;font-weight:700;color:var(--green)">${conv}%</div>
-          <div style="font-size:10px;color:var(--text3)">Conversion</div>
+          <div style="font-size:20px;font-weight:700;color:var(--green)">${r.hired}</div>
+          <div style="font-size:10px;color:var(--text3)">Hired</div>
         </div>
         <div style="background:var(--bg3);border-radius:7px;padding:10px;text-align:center">
           <div style="font-size:20px;font-weight:700;color:var(--red)">${rejRate}%</div>
@@ -604,7 +602,6 @@ function buildRecruiters() {
       <td style="color:var(--green);font-weight:600">${r.hired}</td>
       <td style="color:var(--red);font-weight:600">${r.rejected}</td>
       <td style="color:var(--accent);font-weight:600">${r.active}</td>
-      <td><span class="pill ${+conv>=20?'p-g':+conv>=5?'p-y':'p-gr'}">${conv}%</span></td>
       <td style="font-size:11px;color:var(--text3)">${r.vacs.size}</td>
     </tr>`;
   }).join('');
@@ -614,7 +611,7 @@ function buildRecruiters() {
     <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:20px;overflow-x:auto">
       <table class="ot">
         <thead><tr>
-          <th>Рекрутер</th><th>Аплікацій</th><th>Hired</th><th>Rejected</th><th>Активних</th><th>Conversion</th><th>Вакансій</th>
+          <th>Рекрутер</th><th>Аплікацій</th><th>Hired</th><th>Rejected</th><th>Активних</th><th>Вакансій</th>
         </tr></thead>
         <tbody>${tableRows}</tbody>
       </table>
