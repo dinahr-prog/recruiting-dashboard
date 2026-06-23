@@ -250,11 +250,13 @@ function setCustomPeriod() {
   refreshAll();
 }
 
-function filteredApps(vacId) {
+// mode: 'added' = filter by created_at (new applications), 'active' = filter by updated_at (moved in period)
+function filteredApps(vacId, mode) {
   const {from, to} = periodDates();
   return APPS.filter(a => {
     if (vacId !== undefined && a.vid !== vacId) return false;
-    return a.ca >= from && a.ca <= to;
+    const date = (mode === 'active') ? (a.ua || a.ca) : a.ca;
+    return date >= from && date <= to;
   });
 }
 
@@ -360,18 +362,23 @@ function sortBy(col) {
 function filterState(s) { stateFilter=s; renderTable(); }
 
 // ---- FUNNEL ----
+let funnelAppsCache = []; // for stage click drill-down
+
 function buildFunnel(vacId) {
   const vac = VACS.find(v=>v.id===vacId);
   if (!vac) return;
-  const apps = filteredApps(vacId);
+
+  // Use updated_at for period filtering (who was ACTIVE/MOVED in this period)
+  const apps = filteredApps(vacId, 'active');
+  funnelAppsCache = apps;
+
   const stageCounts = {};
   apps.forEach(a=>{ stageCounts[a.sn] = (stageCounts[a.sn]||0)+1; });
   const total    = apps.length;
   const hired    = apps.filter(a=>isHired(a.sn)).length;
   const rejected = apps.filter(a=>isReject(a.sn)).length;
-  const conv     = total>0 ? ((hired/total)*100).toFixed(1) : 0;
+  const newAdded = filteredApps(vacId, 'added').length; // newly added in period
 
-  // All defined stages for this pipeline + any extra from data
   const defStages = (vac.stages||[]).slice().sort((a,b)=>a.pos-b.pos);
   const defNames  = new Set(defStages.map(s=>s.name));
   const extraNames = Object.keys(stageCounts).filter(n=>!defNames.has(n));
@@ -383,7 +390,7 @@ function buildFunnel(vacId) {
   const maxCount = Math.max(...Object.values(stageCounts).concat([1]));
   let colorIdx = 0;
 
-  const rows = allStages.map(({name, defined})=>{
+  const rows = allStages.map(({name})=>{
     const cnt = stageCounts[name]||0;
     const isEmpty = cnt===0;
     const pct = isEmpty ? 100 : (cnt/maxCount)*100;
@@ -395,27 +402,21 @@ function buildFunnel(vacId) {
         <div class="s-cnt empty">0</div>
       </div>`;
     }
-    return `<div class="stage-row">
+    return `<div class="stage-row" style="cursor:pointer" onclick="showStageBreakdown('${name.replace(/'/g,"\\'")}',${vacId})" title="Клік — деталі по джерелах">
       <div class="s-label">${name}</div>
       <div class="bar-wrap">
         <div class="bar-fill" style="width:${pct}%;background:${color}">
           ${pct>18?cnt:''}
         </div>
       </div>
-      <div class="s-cnt">${cnt}</div>
+      <div class="s-cnt">${cnt} <span style="font-size:9px;color:var(--text3)">🔍</span></div>
     </div>`;
   }).join('');
 
   const biggestRej = Object.entries(stageCounts).filter(([k])=>isReject(k)).sort((a,b)=>b[1]-a[1])[0];
-  const stagnant = (stageCounts['Новий кандидат']||stageCounts['Новый кандидат']||stageCounts['New candidate']||0);
   const alerts = [
     biggestRej && biggestRej[1]>=3 ? `<div class="alert-box alert-warn">
-      <span>🔴</span>
-      <div><strong style="color:var(--red)">Вузьке місце:</strong> "${biggestRej[0]}" — <strong>${biggestRej[1]}</strong> кандидатів (${total>0?((biggestRej[1]/total)*100).toFixed(0):0}%). Розгляньте причини відсіву на цьому кроці.</div>
-    </div>`:null,
-    stagnant>=5 ? `<div class="alert-box alert-info">
-      <span>⚠️</span>
-      <div><strong style="color:var(--yellow)">Стагнація:</strong> <strong>${stagnant}</strong> кандидатів застрягли на початковому етапі — потрібно відпрацювати або відхилити.</div>
+      <span>🔴</span><div><strong style="color:var(--red)">Вузьке місце:</strong> "${biggestRej[0]}" — <strong>${biggestRej[1]}</strong> кандидатів.</div>
     </div>`:null,
   ].filter(Boolean).join('');
 
@@ -432,14 +433,65 @@ function buildFunnel(vacId) {
         </div>
       </div>
     </div>
+    <div class="alert-box alert-info" style="margin-bottom:14px">
+      <span>ℹ️</span>
+      <div style="font-size:11px">Воронка показує кандидатів, чия стадія <strong>змінювалась у обраний період</strong> (за датою останнього переміщення). Нових додано за період: <strong>${newAdded}</strong>. Клікай на стадію щоб побачити деталі по джерелах.</div>
+    </div>
     <div class="fun-stats">
-      <div class="fs-card"><div class="fs-val" style="color:var(--accent)">${total}</div><div class="fs-lbl">Аплікацій за період</div></div>
-      <div class="fs-card"><div class="fs-val" style="color:var(--green)">${hired}</div><div class="fs-lbl">Hired / Offer accepted</div></div>
+      <div class="fs-card"><div class="fs-val" style="color:var(--accent)">${total}</div><div class="fs-lbl">Активних у воронці</div></div>
+      <div class="fs-card"><div class="fs-val" style="color:var(--green)">${hired}</div><div class="fs-lbl">Hired / Offer</div></div>
       <div class="fs-card"><div class="fs-val" style="color:var(--red)">${rejected}</div><div class="fs-lbl">Rejected</div></div>
     </div>
     ${alerts}
     <div class="stage-list">${rows}</div>
-    ${defStages.length>0?`<div style="font-size:10px;color:var(--text3);margin-top:12px">Темно-сірі рядки = етапи pipeline без кандидатів за обраний період</div>`:''}`;
+    <div style="font-size:10px;color:var(--text3);margin-top:10px">Темно-сірі рядки = стадії без руху кандидатів за обраний період · 🔍 = клік для деталей</div>
+    <div id="stage-breakdown"></div>`;
+}
+
+// ---- STAGE BREAKDOWN (click on stage) ----
+function showStageBreakdown(stageName, vacId) {
+  const stageApps = funnelAppsCache.filter(a => a.vid===vacId && a.sn===stageName);
+  const total = stageApps.length;
+  if (!total) return;
+
+  function breakdown(field, label) {
+    const map = {};
+    stageApps.forEach(a => {
+      const v = a[field] || 'Не вказано';
+      map[v] = (map[v]||0)+1;
+    });
+    const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+    const maxN = sorted[0]?.[1]||1;
+    const rows = sorted.map(([name,cnt])=>{
+      const pct = ((cnt/total)*100).toFixed(0);
+      return `<div style="display:grid;grid-template-columns:140px 1fr 65px;align-items:center;gap:8px;margin-bottom:5px">
+        <div style="font-size:11px;color:var(--text2);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${name}</div>
+        <div style="height:18px;background:var(--bg3);border-radius:3px;overflow:hidden">
+          <div style="height:100%;width:${(cnt/maxN)*100}%;background:var(--accent);border-radius:3px;opacity:.8"></div>
+        </div>
+        <div style="font-size:11px;font-weight:600">${cnt} <span style="color:var(--text3)">${pct}%</span></div>
+      </div>`;
+    }).join('');
+    return `<div style="flex:1;min-width:200px">
+      <div style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">${label}</div>
+      ${rows}
+    </div>`;
+  }
+
+  const html = `
+    <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-top:14px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px">
+        <div style="font-size:14px;font-weight:700">🔍 ${stageName} — ${total} кандидатів</div>
+        <div style="cursor:pointer;color:var(--text3);font-size:18px" onclick="document.getElementById('stage-breakdown').innerHTML=''">✕</div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:20px">
+        ${breakdown('stype', 'Source Type')}
+        ${breakdown('src',   'Джерело')}
+        ${breakdown('scr',   'Sourcer')}
+        ${breakdown('rec',   'Recruiter')}
+      </div>
+    </div>`;
+  document.getElementById('stage-breakdown').innerHTML = html;
 }
 
 // ---- SOURCES ----
@@ -695,10 +747,96 @@ function buildBottlenecks() {
       ${total===0 ? `<div class="bn-note" style="background:var(--bg3);color:var(--text3)">Немає аплікацій за цей період</div>` : ''}
     </div>`;
   }).join('');
+  // ---- REJECT ANALYTICS ----
+  const {from: rFrom, to: rTo} = periodDates();
+  const rejectApps = APPS.filter(a => {
+    const d = a.ua || a.ca;
+    return d >= rFrom && d <= rTo && (a.rw || a.rr);
+  });
+
+  // Who rejected
+  const weRejected    = rejectApps.filter(a => a.rw === 'ми відмовили').length;
+  const candRejected  = rejectApps.filter(a => a.rw === 'кандидат відмовився').length;
+  const totalTagged   = rejectApps.length;
+
+  // Reasons breakdown (rr field)
+  const reasonMap = {};
+  rejectApps.forEach(a => {
+    if (a.rr) {
+      reasonMap[a.rr] = (reasonMap[a.rr]||0) + 1;
+    }
+  });
+  const reasons = Object.entries(reasonMap).sort((a,b)=>b[1]-a[1]);
+  const maxReason = reasons[0]?.[1]||1;
+
+  const pieHtml = totalTagged > 0 ? (() => {
+    const weP  = Math.round((weRejected/totalTagged)*100);
+    const canP = Math.round((candRejected/totalTagged)*100);
+    return `<div style="display:flex;gap:24px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:14px;height:14px;border-radius:50%;background:var(--red)"></div>
+          <div style="font-size:13px">Ми відмовили</div>
+          <div style="font-weight:700;font-size:16px;color:var(--red)">${weRejected}</div>
+          <div style="font-size:11px;color:var(--text3)">${weP}%</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:14px;height:14px;border-radius:50%;background:var(--yellow)"></div>
+          <div style="font-size:13px">Кандидат відмовився</div>
+          <div style="font-weight:700;font-size:16px;color:var(--yellow)">${candRejected}</div>
+          <div style="font-size:11px;color:var(--text3)">${canP}%</div>
+        </div>
+      </div>
+      <div>
+        <svg width="80" height="80" viewBox="0 0 80 80">
+          ${(()=>{
+            const r=36, cx=40, cy=40;
+            const slice=(start,pct,col)=>{
+              if(pct<=0) return '';
+              if(pct>=100) return `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${col}" opacity=".85"/>`;
+              const a=pct/100*Math.PI*2, x1=cx+r*Math.sin(start*Math.PI*2),
+                y1=cy-r*Math.cos(start*Math.PI*2),
+                x2=cx+r*Math.sin((start+pct/100)*Math.PI*2),
+                y2=cy-r*Math.cos((start+pct/100)*Math.PI*2),
+                lg=pct>50?1:0;
+              return `<path d="M${cx},${cy} L${x1},${y1} A${r},${r} 0 ${lg},1 ${x2},${y2} Z" fill="${col}" opacity=".85"/>`;
+            };
+            return slice(0,weP,'var(--red)')+slice(weP/100,canP,'var(--yellow)');
+          })()}
+        </svg>
+        <div style="font-size:10px;color:var(--text3);text-align:center">всього з тегами: ${totalTagged}</div>
+      </div>
+    </div>`;
+  })() : `<div style="color:var(--text3);font-size:12px">Немає відмов з тегами за цей період</div>`;
+
+  const reasonsHtml = reasons.length > 0 ? `
+    <div style="margin-top:8px">
+      <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Причини відмов</div>
+      ${reasons.map(([reason,cnt])=>{
+        const pct = Math.round((cnt/totalTagged)*100);
+        return `<div style="display:grid;grid-template-columns:200px 1fr 70px;align-items:center;gap:10px;margin-bottom:7px">
+          <div style="font-size:12px;color:var(--text2);text-align:right">${reason}</div>
+          <div style="height:20px;background:var(--bg3);border-radius:4px;overflow:hidden">
+            <div style="height:100%;width:${Math.round((cnt/maxReason)*100)}%;background:var(--accent);border-radius:4px;opacity:.75"></div>
+          </div>
+          <div style="font-size:12px;font-weight:600">${cnt} <span style="color:var(--text3)">${pct}%</span></div>
+        </div>`;
+      }).join('')}
+    </div>` : '';
+
   document.getElementById('tab-bottlenecks').innerHTML = `
     <h2>Вузькі місця — Відкриті вакансії</h2>
-    <p style="font-size:11px;color:var(--text2);margin-bottom:14px">Дані фільтруються за обраним вище періодом. Клік → воронка вакансії. Поради базуються на етапі найбільшого відсіву.</p>
-    <div class="bn-grid">${cards||'<div style="color:var(--text3)">Немає відкритих вакансій</div>'}</div>`;
+    <p style="font-size:11px;color:var(--text2);margin-bottom:14px">Дані за обраний період. Клік на вакансію → воронка.</p>
+    <div class="bn-grid">${cards||'<div style="color:var(--text3)">Немає відкритих вакансій</div>'}</div>
+
+    <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--border)">
+      <h2 style="margin-bottom:4px">Аналітика відмов</h2>
+      <p style="font-size:11px;color:var(--text2);margin-bottom:14px">Кандидати з тегами відмови (ми відмовили / кандидат відмовився) за обраний період. Теги та причини заповнюються в PeopleForce при переміщенні на reject-стадію.</p>
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:18px">
+        ${pieHtml}
+        ${reasonsHtml}
+      </div>
+    </div>`;
 }
 
 // ---- NAVIGATION ----

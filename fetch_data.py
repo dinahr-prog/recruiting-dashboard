@@ -86,6 +86,7 @@ for vid in vac_ids:
                 "vac_id":       vid,
                 "stage_name":   (a.get("pipeline_state") or {}).get("name", ""),
                 "created_at":   (a.get("created_at") or "")[:10],
+                "updated_at":   (a.get("updated_at") or "")[:10],
             })
         pagination = data.get("metadata", {}).get("pagination", {})
         if page >= pagination.get("pages", 1):
@@ -94,32 +95,80 @@ for vid in vac_ids:
         time.sleep(0.1)
 print(f"  Loaded {len(apps_raw)} applications")
 
-# ── 4. Candidates → source + recruiter map ─────────────────────────
-print("Fetching candidates (source + recruiter mapping)...")
-source_map    = {}  # candidate_id → source string
-recruiter_map = {}  # candidate_id → recruiter name
-candidates = fetch_all_pages("recruitment/candidates", per_page=100, max_pages=40)
-for c in candidates:
+# ── 4. Candidates → full enriched map (with custom fields + tags) ───
+print("Fetching candidates (source, recruiter, custom fields, tags)...")
+cand_map = {}   # candidate_id → enriched dict
+candidates_list = fetch_all_pages("recruitment/candidates", per_page=100, max_pages=40)
+
+# Fetch full detail for each to get custom_fields and tags
+print(f"  Fetching full details for {len(candidates_list)} candidates...")
+for c in candidates_list:
     cid = str(c["id"])
-    source_map[cid] = (c.get("source") or "").strip()
-    cb = c.get("created_by") or {}
+    detail = get(f"recruitment/candidates/{cid}")
+    d = (detail or {}).get("data") or c
+
+    # source
+    source = (d.get("source") or "").strip()
+
+    # recruiter (created_by)
+    cb = d.get("created_by") or {}
+    recruiter = ""
     if cb:
         first = cb.get("first_name") or ""
-        last  = cb.get("last_name")  or ""
-        recruiter_map[cid] = f"{first} {last}".strip() or cb.get("email", "Unknown")
-print(f"  Mapped {len(source_map)} candidates, {len(recruiter_map)} with recruiter info")
+        last  = cb.get("last_name") or ""
+        recruiter = f"{first} {last}".strip() or cb.get("email", "")
 
-# ── 5. Build APPS list with source + recruiter ──────────────────────
+    # custom fields: Sourcer + Source type
+    sourcer     = ""
+    source_type = ""
+    for cf in (d.get("custom_fields") or []):
+        if cf.get("internal_name") == "sourcer":
+            sourcer = cf.get("value") or ""
+        elif cf.get("internal_name") == "source_type":
+            source_type = cf.get("value") or ""
+
+    # tags → extract rejection type and reason
+    tags = [t.get("name", "") for t in (d.get("tags") or [])]
+    reject_who    = ""
+    reject_reason = ""
+    for tag in tags:
+        tl = tag.lower()
+        if "ми відмовили" in tl:
+            reject_who = "ми відмовили"
+        elif "кандидат відмовився" in tl:
+            reject_who = "кандидат відмовився"
+        if "причина:" in tl:
+            reject_reason = tag.split("причина:")[-1].strip()
+
+    cand_map[cid] = {
+        "src":  source,
+        "rec":  recruiter,
+        "scr":  sourcer,       # sourcer (researcher)
+        "stype":source_type,   # Inbound / Outbound
+        "rw":   reject_who,    # хто відмовив
+        "rr":   reject_reason, # причина відмови
+    }
+    time.sleep(0.07)
+
+print(f"  Mapped {len(cand_map)} candidates with full details")
+
+# ── 5. Build APPS list with all enriched fields ─────────────────────
 apps_js = []
 for a in apps_raw:
     cid = str(a["applicant_id"])
+    cm  = cand_map.get(cid, {})
     apps_js.append({
-        "id":  a["app_id"],
-        "vid": a["vac_id"],
-        "sn":  a["stage_name"],
-        "src": source_map.get(cid, ""),
-        "rec": recruiter_map.get(cid, ""),
-        "ca":  a["created_at"],
+        "id":    a["app_id"],
+        "vid":   a["vac_id"],
+        "sn":    a["stage_name"],
+        "src":   cm.get("src", ""),
+        "rec":   cm.get("rec", ""),
+        "scr":   cm.get("scr", ""),
+        "stype": cm.get("stype", ""),
+        "rw":    cm.get("rw", ""),
+        "rr":    cm.get("rr", ""),
+        "ca":    a["created_at"],          # created (application added)
+        "ua":    a.get("updated_at", ""),  # updated (last stage move)
     })
 
 # ── 6. Inject into template ────────────────────────────────────────
@@ -137,8 +186,9 @@ if "__RECRUITING_DATA__" not in template:
 
 html = template.replace("__RECRUITING_DATA__", data_block)
 
-from datetime import datetime, timezone
-build_time = datetime.now(timezone.utc).strftime("%d.%m.%Y %H:%M UTC")
+from datetime import datetime, timezone, timedelta
+kyiv_time = datetime.now(timezone.utc) + timedelta(hours=3)
+build_time = kyiv_time.strftime("%d.%m.%Y %H:%M (Київ)")
 html = html.replace("__BUILD_TIME__", build_time)
 
 with open("index.html", "w", encoding="utf-8") as f:
@@ -146,4 +196,4 @@ with open("index.html", "w", encoding="utf-8") as f:
 
 size_kb = round(len(html.encode()) / 1024, 1)
 print(f"Done! index.html written ({size_kb} KB)")
-print(f"  Vacancies: {len(vacs_js)}, Applications: {len(apps_js)}, Sources mapped: {len(source_map)}")
+print(f"  Vacancies: {len(vacs_js)}, Applications: {len(apps_js)}, Candidates enriched: {len(cand_map)}")
