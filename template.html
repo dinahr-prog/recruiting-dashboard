@@ -368,57 +368,85 @@ function buildFunnel(vacId) {
   const vac = VACS.find(v=>v.id===vacId);
   if (!vac) return;
 
-  // Use updated_at for period filtering (who was ACTIVE/MOVED in this period)
-  const apps = filteredApps(vacId, 'active');
+  // Classic funnel: filter by created_at (added in period), show where they are NOW
+  const apps = filteredApps(vacId, 'added');
   funnelAppsCache = apps;
 
-  const stageCounts = {};
-  apps.forEach(a=>{ stageCounts[a.sn] = (stageCounts[a.sn]||0)+1; });
   const total    = apps.length;
   const hired    = apps.filter(a=>isHired(a.sn)).length;
   const rejected = apps.filter(a=>isReject(a.sn)).length;
-  const newAdded = filteredApps(vacId, 'added').length; // newly added in period
+  const inProcess = total - hired - rejected;
 
+  // Build stage position map from pipeline definition
   const defStages = (vac.stages||[]).slice().sort((a,b)=>a.pos-b.pos);
-  const defNames  = new Set(defStages.map(s=>s.name));
-  const extraNames = Object.keys(stageCounts).filter(n=>!defNames.has(n));
-  const allStages = [
-    ...defStages.map(s=>({name:s.name, defined:true})),
-    ...extraNames.map(n=>({name:n, defined:false}))
-  ];
+  const stagePosMap = {}; // stageName → position
+  defStages.forEach(s => { stagePosMap[s.name] = s.pos; });
 
-  const maxCount = Math.max(...Object.values(stageCounts).concat([1]));
-  let colorIdx = 0;
+  // For each app, get its stage position (fallback: 9999 = unknown)
+  const appPos = (a) => stagePosMap[a.sn] ?? 9999;
 
-  const rows = allStages.map(({name})=>{
-    const cnt = stageCounts[name]||0;
-    const isEmpty = cnt===0;
-    const pct = isEmpty ? 100 : (cnt/maxCount)*100;
-    let color = isReject(name)?'var(--red)':isHired(name)?'var(--green)':stageColor(colorIdx++);
-    if (isEmpty) {
-      return `<div class="stage-row">
-        <div class="s-label empty">${name}</div>
-        <div class="bar-wrap"><div class="bar-empty"><span style="font-size:10px;color:var(--text3)">0</span></div></div>
-        <div class="s-cnt empty">0</div>
-      </div>`;
-    }
-    return `<div class="stage-row" style="cursor:pointer" onclick="showStageBreakdown('${name.replace(/'/g,"\\'")}',${vacId})" title="Клік — деталі по джерелах">
-      <div class="s-label">${name}</div>
+  // Separate positive stages (non-reject) for the funnel display
+  const positiveStages = defStages.filter(s => !isReject(s.name) && !isHired(s.name));
+  const hiredStages    = defStages.filter(s => isHired(s.name));
+
+  // Classic cumulative count: "reached stage X" = current position >= X
+  // (reject stages have positions too, so a candidate at reject pos 4
+  //  has passed all positive stages with pos <= 4)
+  const rows = positiveStages.map((stage, i) => {
+    const reached = apps.filter(a => appPos(a) >= stage.pos).length;
+    const prev    = i === 0 ? total : positiveStages.slice(0, i).map(s =>
+      apps.filter(a => appPos(a) >= s.pos).length
+    ).pop();
+    const dropped = prev - reached;
+    const pct = total > 0 ? Math.round((reached / total) * 100) : 0;
+    const barW = total > 0 ? Math.round((reached / total) * 100) : 0;
+    const color = stageColor(i);
+    const dropHtml = dropped > 0 && i > 0
+      ? `<div style="font-size:9px;color:var(--red);text-align:right;margin-top:1px">−${dropped}</div>` : '';
+    return `<div class="stage-row" style="cursor:pointer" onclick="showStageBreakdown('${stage.name.replace(/'/g,"\\'")}',${vacId},'classic')" title="Клік — деталі по джерелах">
+      <div class="s-label">${stage.name}</div>
       <div class="bar-wrap">
-        <div class="bar-fill" style="width:${pct}%;background:${color}">
-          ${pct>18?cnt:''}
+        <div class="bar-fill" style="width:${barW}%;background:${color}">
+          ${barW>18?reached:''}
         </div>
+        ${barW<=18?`<span style="margin-left:4px;font-size:11px">${reached}</span>`:''}
       </div>
-      <div class="s-cnt">${cnt} <span style="font-size:9px;color:var(--text3)">🔍</span></div>
+      <div class="s-cnt">
+        <div>${reached} <span style="color:var(--text3);font-size:10px">${pct}%</span></div>
+        ${dropHtml}
+      </div>
     </div>`;
-  }).join('');
+  });
 
-  const biggestRej = Object.entries(stageCounts).filter(([k])=>isReject(k)).sort((a,b)=>b[1]-a[1])[0];
-  const alerts = [
-    biggestRej && biggestRej[1]>=3 ? `<div class="alert-box alert-warn">
-      <span>🔴</span><div><strong style="color:var(--red)">Вузьке місце:</strong> "${biggestRej[0]}" — <strong>${biggestRej[1]}</strong> кандидатів.</div>
-    </div>`:null,
-  ].filter(Boolean).join('');
+  // Add hired row
+  if (hiredStages.length > 0 || hired > 0) {
+    const hiredPct = total > 0 ? Math.round((hired / total) * 100) : 0;
+    rows.push(`<div class="stage-row" style="cursor:pointer" onclick="showStageBreakdown('__hired__',${vacId},'classic')">
+      <div class="s-label" style="color:var(--green)">✅ Hired / Offer</div>
+      <div class="bar-wrap">
+        <div class="bar-fill" style="width:${total>0?(hired/total)*100:0}%;background:var(--green)">
+          ${hired > 0 && (hired/total)>0.18 ? hired : ''}
+        </div>
+        ${hired > 0 && (hired/total)<=0.18 ? `<span style="margin-left:4px;font-size:11px">${hired}</span>` : ''}
+      </div>
+      <div class="s-cnt">${hired} <span style="color:var(--text3);font-size:10px">${hiredPct}%</span></div>
+    </div>`);
+  }
+
+  // Rejected summary row
+  if (rejected > 0) {
+    const rejPct = total > 0 ? Math.round((rejected / total) * 100) : 0;
+    rows.push(`<div class="stage-row" style="cursor:pointer;opacity:.8" onclick="showStageBreakdown('__rejected__',${vacId},'classic')">
+      <div class="s-label" style="color:var(--red)">❌ Rejected (всі стадії)</div>
+      <div class="bar-wrap">
+        <div class="bar-fill" style="width:${rejPct}%;background:var(--red);opacity:.7">
+          ${rejPct>18?rejected:''}
+        </div>
+        ${rejPct<=18?`<span style="margin-left:4px;font-size:11px">${rejected}</span>`:''}
+      </div>
+      <div class="s-cnt">${rejected} <span style="color:var(--text3);font-size:10px">${rejPct}%</span></div>
+    </div>`);
+  }
 
   document.getElementById('tab-funnel').innerHTML = `
     <div class="fun-header">
@@ -435,22 +463,39 @@ function buildFunnel(vacId) {
     </div>
     <div class="alert-box alert-info" style="margin-bottom:14px">
       <span>ℹ️</span>
-      <div style="font-size:11px">Воронка показує кандидатів, чия стадія <strong>змінювалась у обраний період</strong> (за датою останнього переміщення). Нових додано за період: <strong>${newAdded}</strong>. Клікай на стадію щоб побачити деталі по джерелах.</div>
+      <div style="font-size:11px">Класична воронка: кандидати <strong>додані за обраний період</strong> (${total}), показано скільки з них <strong>досягло кожної стадії</strong>. Кандидат на стадії "Інтерв'ю" — зарахований на всіх попередніх стадіях теж. Клікай на стадію для деталей.</div>
     </div>
     <div class="fun-stats">
-      <div class="fs-card"><div class="fs-val" style="color:var(--accent)">${total}</div><div class="fs-lbl">Активних у воронці</div></div>
-      <div class="fs-card"><div class="fs-val" style="color:var(--green)">${hired}</div><div class="fs-lbl">Hired / Offer</div></div>
+      <div class="fs-card"><div class="fs-val" style="color:var(--accent)">${total}</div><div class="fs-lbl">Додано за період</div></div>
+      <div class="fs-card"><div class="fs-val" style="color:var(--text2)">${inProcess}</div><div class="fs-lbl">В процесі</div></div>
+      <div class="fs-card"><div class="fs-val" style="color:var(--green)">${hired}</div><div class="fs-lbl">Hired</div></div>
       <div class="fs-card"><div class="fs-val" style="color:var(--red)">${rejected}</div><div class="fs-lbl">Rejected</div></div>
     </div>
-    ${alerts}
-    <div class="stage-list">${rows}</div>
-    <div style="font-size:10px;color:var(--text3);margin-top:10px">Темно-сірі рядки = стадії без руху кандидатів за обраний період · 🔍 = клік для деталей</div>
+    <div class="stage-list">${rows.join('')}</div>
+    <div style="font-size:10px;color:var(--text3);margin-top:10px">% = від загальної кількості доданих за період · 🔍 клік = деталі по джерелах</div>
     <div id="stage-breakdown"></div>`;
 }
 
 // ---- STAGE BREAKDOWN (click on stage) ----
-function showStageBreakdown(stageName, vacId) {
-  const stageApps = funnelAppsCache.filter(a => a.vid===vacId && a.sn===stageName);
+function showStageBreakdown(stageName, vacId, mode) {
+  const vac = VACS.find(v=>v.id===vacId);
+  let stageApps;
+  if (mode === 'classic') {
+    if (stageName === '__hired__') {
+      stageApps = funnelAppsCache.filter(a => a.vid===vacId && isHired(a.sn));
+    } else if (stageName === '__rejected__') {
+      stageApps = funnelAppsCache.filter(a => a.vid===vacId && isReject(a.sn));
+    } else {
+      // Classic: all candidates who REACHED this stage (current pos >= stage pos)
+      const defStages = (vac?.stages||[]);
+      const stagePosMap = {};
+      defStages.forEach(s => { stagePosMap[s.name] = s.pos; });
+      const stagePos = stagePosMap[stageName] ?? 0;
+      stageApps = funnelAppsCache.filter(a => a.vid===vacId && (stagePosMap[a.sn] ?? 9999) >= stagePos);
+    }
+  } else {
+    stageApps = funnelAppsCache.filter(a => a.vid===vacId && a.sn===stageName);
+  }
   const total = stageApps.length;
   if (!total) return;
 
