@@ -142,21 +142,10 @@ h2{font-size:15px;font-weight:700;margin-bottom:14px;}
   <!-- Period filter -->
   <div class="period-bar">
     <label>Період:</label>
-    <div style="display:flex;gap:4px;flex-wrap:wrap">
-      <button class="period-btn" onclick="setPeriodToday()">Сьогодні</button>
-      <button class="period-btn" onclick="setPeriod(1)">Тиждень</button>
-      <button class="period-btn" onclick="setPeriod(2)">2 тижні</button>
-      <button class="period-btn active" onclick="setPeriod(4)">Місяць</button>
-      <button class="period-btn" onclick="setPeriod(12)">3 міс</button>
-      <button class="period-btn" onclick="setPeriod(26)">6 міс</button>
-      <button class="period-btn" onclick="setPeriod(9999)">Всі часи</button>
-    </div>
-    <div class="period-sep">|</div>
-    <label>Вручну:</label>
-    <input type="date" id="dateFrom" onchange="setCustomPeriod()">
+    <input type="date" id="dateFrom">
     <span style="color:var(--text3)">—</span>
-    <input type="date" id="dateTo" onchange="setCustomPeriod()">
-    <span id="periodLabel"></span>
+    <input type="date" id="dateTo">
+    <button class="period-btn active" onclick="applyCustomPeriod()" style="margin-left:4px">Застосувати</button>
   </div>
 
   <!-- Summary cards -->
@@ -199,9 +188,9 @@ const STAGE_COLORS = ['#4f8ef7','#7c3aed','#06b6d4','#10b981','#f59e0b','#f97316
 const stageColor = (i) => STAGE_COLORS[i % STAGE_COLORS.length];
 
 // ---- STATE ----
-let periodWeeks = 4;
-let dateFrom = null;
-let dateTo   = null;
+const _today = new Date(), _from = new Date(); _from.setDate(_today.getDate() - 30);
+let dateFrom = _from.toISOString().slice(0,10);
+let dateTo   = _today.toISOString().slice(0,10);
 let currentVacId = (VACS.find(v=>v.state==='opened')||VACS[0]).id;
 let sortCol  = 'total';
 let sortDir  = -1;
@@ -210,43 +199,14 @@ let currentTab = 'overview';
 
 // ---- PERIOD ----
 function periodDates() {
-  if (dateFrom && dateTo) return {from: dateFrom, to: dateTo};
-  if (periodWeeks >= 9999) return {from:'2000-01-01', to:'2999-12-31'};
-  const to = new Date();
-  const from = new Date(); from.setDate(from.getDate() - periodWeeks * 7);
-  return {from: from.toISOString().slice(0,10), to: to.toISOString().slice(0,10)};
+  return {from: dateFrom || '2000-01-01', to: dateTo || '2999-12-31'};
 }
 
-function setPeriodToday() {
-  const today = new Date().toISOString().slice(0,10);
-  dateFrom = today; dateTo = today;
-  periodWeeks = 0;
-  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.period-btn')[0].classList.add('active');
-  document.getElementById('periodLabel').textContent = today;
-  refreshAll();
-}
-
-function setPeriod(w) {
-  periodWeeks = w; dateFrom = null; dateTo = null;
-  document.getElementById('dateFrom').value = '';
-  document.getElementById('dateTo').value = '';
-  document.querySelectorAll('.period-btn').forEach((b,i)=>{
-    const weeks=[1,2,4,12,26,9999];
-    b.classList.toggle('active', weeks[i]===w);
-  });
-  const {from,to} = periodDates();
-  document.getElementById('periodLabel').textContent = w>=9999 ? 'Всі дані' : `${from} → ${to}`;
-  refreshAll();
-}
-
-function setCustomPeriod() {
-  dateFrom = document.getElementById('dateFrom').value;
-  dateTo   = document.getElementById('dateTo').value;
-  if (!dateFrom || !dateTo) return;
-  periodWeeks = 0;
-  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
-  document.getElementById('periodLabel').textContent = `${dateFrom} → ${dateTo}`;
+function applyCustomPeriod() {
+  const f = document.getElementById('dateFrom').value;
+  const t = document.getElementById('dateTo').value;
+  if (!f || !t) return;
+  dateFrom = f; dateTo = t;
   refreshAll();
 }
 
@@ -879,7 +839,8 @@ function refreshAll() {
 }
 
 // ---- INIT ----
-setPeriod(4);
+document.getElementById('dateFrom').value = dateFrom;
+document.getElementById('dateTo').value   = dateTo;
 buildOverview();
 buildFunnel(currentVacId);
 buildSources();
