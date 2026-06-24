@@ -385,83 +385,37 @@ function buildFunnel(vacId) {
   // For each app, get its stage position (fallback: 9999 = unknown)
   const appPos = (a) => stagePosMap[a.sn] ?? 9999;
 
-  // Separate positive and reject stages
-  const positiveStages = defStages.filter(s => !isReject(s.name) && !isHired(s.name));
-  const rejectStages   = defStages.filter(s => isReject(s.name));
-  const hiredStages    = defStages.filter(s => isHired(s.name));
+  // Show ALL stages in pipeline order, each with count of candidates currently on it
+  const stageCounts = {};
+  apps.forEach(a => { stageCounts[a.sn] = (stageCounts[a.sn]||0)+1; });
+  const maxCount = Math.max(...Object.values(stageCounts).concat([1]));
 
   let colorIdx = 0;
-
-  // Classic cumulative count for positive stages
-  const rows = positiveStages.map((stage, i) => {
-    const reached = apps.filter(a => appPos(a) >= stage.pos).length;
-    const prev    = i === 0 ? total : apps.filter(a => appPos(a) >= positiveStages[i-1].pos).length;
-    const dropped = prev - reached;
-    const pct = total > 0 ? Math.round((reached / total) * 100) : 0;
-    const barW = total > 0 ? Math.round((reached / total) * 100) : 0;
-    const color = stageColor(colorIdx++);
-    const dropHtml = dropped > 0 && i > 0
-      ? `<div style="font-size:9px;color:var(--red);text-align:right;margin-top:1px">−${dropped}</div>` : '';
-    return `<div class="stage-row" style="cursor:pointer" onclick="showStageBreakdown('${stage.name.replace(/'/g,"\\'")}',${vacId},'classic')" title="Клік — деталі по джерелах">
-      <div class="s-label">${stage.name}</div>
+  const rows = defStages.map(stage => {
+    const cnt   = stageCounts[stage.name] || 0;
+    const pct   = total > 0 ? Math.round((cnt / total) * 100) : 0;
+    const barW  = maxCount > 0 ? Math.round((cnt / maxCount) * 100) : 0;
+    const isRej = isReject(stage.name);
+    const isHir = isHired(stage.name);
+    const color = isHir ? 'var(--green)' : isRej ? 'var(--red)' : stageColor(colorIdx++);
+    const opacity = isRej ? 'opacity:.8;' : '';
+    if (cnt === 0) {
+      return `<div class="stage-row">
+        <div class="s-label empty">${stage.name}</div>
+        <div class="bar-wrap"><div class="bar-empty"><span style="font-size:10px;color:var(--text3)">0</span></div></div>
+        <div class="s-cnt empty">0</div>
+      </div>`;
+    }
+    return `<div class="stage-row" style="cursor:pointer;${opacity}" onclick="showStageBreakdown('${stage.name.replace(/'/g,"\\'")}',${vacId},'exact')">
+      <div class="s-label" style="${isRej?'color:var(--red)':''}${isHir?'color:var(--green)':''}">${stage.name}</div>
       <div class="bar-wrap">
-        <div class="bar-fill" style="width:${barW}%;background:${color}">
-          ${barW>18?reached:''}
+        <div class="bar-fill" style="width:${barW}%;background:${color};${isRej?'opacity:.75':''}">
+          ${barW>18?cnt:''}
         </div>
-        ${barW<=18?`<span style="margin-left:4px;font-size:11px">${reached}</span>`:''}
+        ${barW<=18?`<span style="margin-left:4px;font-size:11px">${cnt}</span>`:''}
       </div>
-      <div class="s-cnt">
-        <div>${reached} <span style="color:var(--text3);font-size:10px">${pct}%</span></div>
-        ${dropHtml}
-      </div>
+      <div class="s-cnt">${cnt} <span style="color:var(--text3);font-size:10px">${pct}%</span></div>
     </div>`;
-  });
-
-  // Add hired row
-  if (hiredStages.length > 0 || hired > 0) {
-    const hiredPct = total > 0 ? Math.round((hired / total) * 100) : 0;
-    rows.push(`<div class="stage-row" style="cursor:pointer" onclick="showStageBreakdown('__hired__',${vacId},'classic')">
-      <div class="s-label" style="color:var(--green)">✅ Hired / Offer</div>
-      <div class="bar-wrap">
-        <div class="bar-fill" style="width:${total>0?(hired/total)*100:0}%;background:var(--green)">
-          ${hired > 0 && (hired/total)>0.18 ? hired : ''}
-        </div>
-        ${hired > 0 && (hired/total)<=0.18 ? `<span style="margin-left:4px;font-size:11px">${hired}</span>` : ''}
-      </div>
-      <div class="s-cnt">${hired} <span style="color:var(--text3);font-size:10px">${hiredPct}%</span></div>
-    </div>`);
-  }
-
-  // Individual reject stages
-  const rejStagesWithData = rejectStages.filter(s => apps.some(a => a.sn === s.name));
-  const rejStagesEmpty    = rejectStages.filter(s => !apps.some(a => a.sn === s.name));
-
-  if (rejStagesWithData.length > 0) {
-    rows.push(`<div style="font-size:10px;color:var(--text3);margin:10px 0 4px;padding-left:4px;letter-spacing:.4px;text-transform:uppercase">Відмови</div>`);
-    rejStagesWithData.forEach(stage => {
-      const cnt = apps.filter(a => a.sn === stage.name).length;
-      const pct = total > 0 ? Math.round((cnt / total) * 100) : 0;
-      const barW = total > 0 ? Math.round((cnt / total) * 100) : 0;
-      rows.push(`<div class="stage-row" style="cursor:pointer;opacity:.9" onclick="showStageBreakdown('${stage.name.replace(/'/g,"\\'")}',${vacId},'exact')">
-        <div class="s-label" style="color:var(--red)">${stage.name}</div>
-        <div class="bar-wrap">
-          <div class="bar-fill" style="width:${barW}%;background:var(--red);opacity:.7">
-            ${barW>18?cnt:''}
-          </div>
-          ${barW<=18?`<span style="margin-left:4px;font-size:11px">${cnt}</span>`:''}
-        </div>
-        <div class="s-cnt">${cnt} <span style="color:var(--text3);font-size:10px">${pct}%</span></div>
-      </div>`);
-    });
-  }
-
-  // Empty reject stages (show dimmed)
-  rejStagesEmpty.forEach(stage => {
-    rows.push(`<div class="stage-row">
-      <div class="s-label empty">${stage.name}</div>
-      <div class="bar-wrap"><div class="bar-empty"><span style="font-size:10px;color:var(--text3)">0</span></div></div>
-      <div class="s-cnt empty">0</div>
-    </div>`);
   });
 
 
