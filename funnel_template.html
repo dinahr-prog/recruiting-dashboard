@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Аналітика воронок — Punch Agency</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  :root{
+    --bg:#0f1117;--surface:#1a1d27;--card:#22263a;--border:#2e3350;
+    --text:#e8eaf0;--muted:#8b90a8;--accent:#6c63ff;--accent2:#00d4aa;
+    --red:#ff5252;--orange:#ff9800;--green:#4caf50;--blue:#2196f3;
+    --yellow:#ffc107;--purple:#9c27b0;
+  }
+  body{background:var(--bg);color:var(--text);font-family:'Inter',system-ui,sans-serif;font-size:14px;min-height:100vh}
+  a{color:var(--accent);text-decoration:none}
+
+  /* TOP BAR */
+  .topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:14px 24px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+  .topbar h1{font-size:18px;font-weight:700;color:#fff;flex:1;min-width:200px}
+  .topbar .built{font-size:11px;color:var(--muted)}
+  .topbar a.link{font-size:12px;color:var(--muted);border:1px solid var(--border);padding:4px 10px;border-radius:6px}
+  .topbar a.link:hover{border-color:var(--accent);color:var(--accent)}
+
+  /* GLOBAL FILTERS */
+  .gfilters{background:var(--surface);border-bottom:1px solid var(--border);padding:12px 24px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+  .gfilters label{font-size:11px;color:var(--muted);margin-right:4px}
+  .gfilters select,.gfilters input[type=date]{background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;outline:none}
+  .gfilters select:focus,.gfilters input[type=date]:focus{border-color:var(--accent)}
+  .gfilters .sep{width:1px;height:28px;background:var(--border);margin:0 4px}
+  .period-btns{display:flex;gap:4px}
+  .period-btns button{background:var(--card);border:1px solid var(--border);color:var(--muted);padding:5px 10px;border-radius:6px;cursor:pointer;font-size:12px;transition:.15s}
+  .period-btns button:hover,.period-btns button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  /* TABS */
+  .tabs{display:flex;gap:2px;padding:0 24px;background:var(--surface);border-bottom:1px solid var(--border)}
+  .tab{padding:12px 20px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);border-bottom:2px solid transparent;transition:.15s;white-space:nowrap}
+  .tab:hover{color:var(--text)}
+  .tab.active{color:var(--accent);border-color:var(--accent)}
+
+  /* MAIN */
+  .main{padding:24px;max-width:1400px;margin:0 auto}
+  .block{display:none}
+  .block.active{display:block}
+
+  /* CARDS ROW */
+  .stat-row{display:flex;flex-wrap:wrap;gap:12px;margin-bottom:20px}
+  .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px 20px;flex:1;min-width:120px}
+  .stat-card .label{font-size:11px;color:var(--muted);margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+  .stat-card .value{font-size:28px;font-weight:700;color:#fff}
+  .stat-card .sub{font-size:11px;color:var(--muted);margin-top:4px}
+  .stat-card.accent{border-color:var(--accent)}
+  .stat-card.green{border-color:var(--green)}
+  .stat-card.red{border-color:var(--red)}
+  .stat-card.orange{border-color:var(--orange)}
+
+  /* SECTION TITLE */
+  .section-title{font-size:15px;font-weight:600;color:#fff;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .section-title small{font-size:11px;color:var(--muted);font-weight:400}
+  .hint{font-size:11px;color:var(--muted);margin-bottom:14px;padding:8px 12px;background:rgba(108,99,255,.08);border-left:3px solid var(--accent);border-radius:4px}
+
+  /* FUNNEL VISUAL */
+  .funnel-wrap{overflow-x:auto}
+  .funnel-table{width:100%;border-collapse:collapse;margin-bottom:24px}
+  .funnel-table th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid var(--border);white-space:nowrap}
+  .funnel-table td{padding:10px 12px;border-bottom:1px solid rgba(46,51,80,.5);vertical-align:middle}
+  .funnel-table tr:hover td{background:rgba(255,255,255,.02)}
+  .funnel-table .stage-name{font-weight:500;color:#fff;max-width:220px}
+  .funnel-table .num{font-size:16px;font-weight:700;color:#fff}
+  .funnel-table .pct{font-size:12px;color:var(--muted)}
+  .funnel-table .conv{font-size:13px;font-weight:600}
+  .bar-cell{min-width:160px}
+  .bar-bg{background:rgba(255,255,255,.06);border-radius:4px;height:10px;overflow:hidden}
+  .bar-fill{height:10px;border-radius:4px;transition:.4s}
+  .bar-main{background:linear-gradient(90deg,var(--accent),var(--accent2))}
+  .bar-rej{background:var(--red)}
+
+  /* SOURCES TABLE */
+  .src-table{width:100%;border-collapse:collapse}
+  .src-table th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)}
+  .src-table td{padding:9px 12px;border-bottom:1px solid rgba(46,51,80,.4)}
+  .src-table tr:hover td{background:rgba(255,255,255,.02)}
+  .src-table .pct-bar{display:flex;align-items:center;gap:8px}
+  .src-table .pct-bar .bar{flex:1;background:rgba(255,255,255,.06);height:6px;border-radius:3px;overflow:hidden}
+  .src-table .pct-bar .fill{height:6px;border-radius:3px;background:var(--accent)}
+  .pct-num{font-size:12px;color:var(--muted);min-width:36px;text-align:right}
+
+  /* ACTIVITY TABLE */
+  .act-table{width:100%;border-collapse:collapse}
+  .act-table th{text-align:left;padding:8px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--border)}
+  .act-table td{padding:9px 12px;border-bottom:1px solid rgba(46,51,80,.4);vertical-align:middle}
+  .act-table tr:hover td{background:rgba(255,255,255,.02)}
+  .act-num{font-size:18px;font-weight:700}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600}
+  .badge-green{background:rgba(76,175,80,.15);color:var(--green)}
+  .badge-red{background:rgba(255,82,82,.15);color:var(--red)}
+  .badge-blue{background:rgba(33,150,243,.15);color:var(--blue)}
+  .badge-gray{background:rgba(255,255,255,.07);color:var(--muted)}
+
+  /* GRID 2 col */
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px}
+  @media(max-width:768px){.grid2{grid-template-columns:1fr}}
+  .card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px 20px}
+
+  /* CURRENT STATE */
+  .cur-stage-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid rgba(46,51,80,.4)}
+  .cur-stage-row:last-child{border:none}
+  .cur-stage-name{flex:1;font-size:13px}
+  .cur-stage-cnt{font-size:16px;font-weight:700;min-width:40px;text-align:right}
+  .cur-stage-bar-wrap{width:140px}
+  .cur-stage-bar{height:8px;border-radius:4px;background:var(--accent);transition:.4s}
+
+  /* TOOLTIP */
+  .tooltip{position:relative;display:inline-block}
+  .tooltip .tip{visibility:hidden;background:#2e3350;color:#fff;text-align:center;border-radius:6px;padding:6px 10px;font-size:11px;position:absolute;z-index:9;bottom:125%;left:50%;transform:translateX(-50%);white-space:nowrap;opacity:0;transition:.2s}
+  .tooltip:hover .tip{visibility:visible;opacity:1}
+
+  /* EMPTY */
+  .empty{text-align:center;padding:48px 0;color:var(--muted)}
+  .empty .icon{font-size:36px;margin-bottom:12px}
+
+  /* FILTERS INSIDE BLOCK */
+  .block-filters{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:16px;align-items:center}
+  .block-filters select{background:var(--card);border:1px solid var(--border);color:var(--text);padding:6px 10px;border-radius:6px;font-size:13px;outline:none}
+
+  /* RECRUITER SUMMARY CARDS */
+  .rec-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:20px}
+  .rec-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .rec-card .rec-name{font-size:13px;font-weight:600;color:#fff;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .rec-card .rec-stats{display:flex;gap:12px}
+  .rec-card .rec-stat{text-align:center}
+  .rec-card .rec-stat .n{font-size:18px;font-weight:700}
+  .rec-card .rec-stat .l{font-size:10px;color:var(--muted)}
+  .rec-card .n.green{color:var(--green)}
+  .rec-card .n.red{color:var(--red)}
+  .rec-card .n.blue{color:var(--blue)}
+
+  /* scrollbar */
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:var(--surface)}
+  ::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+  .loading{text-align:center;padding:60px;color:var(--muted);font-size:15px}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <h1>🎯 Аналітика воронок вакансій</h1>
+  <span class="built">Оновлено: __BUILD_TIME__</span>
+  <a class="link" href="index.html">← Основний дашборд</a>
+</div>
+
+<!-- GLOBAL FILTERS -->
+<div class="gfilters">
+  <div>
+    <label>Вакансія:</label>
+    <select id="gVac">
+      <option value="">Усі вакансії</option>
+    </select>
+  </div>
+  <div>
+    <label>Рекрутер:</label>
+    <select id="gRec">
+      <option value="">Усі рекрутери</option>
+    </select>
+  </div>
+  <div>
+    <label>Джерело:</label>
+    <select id="gSrc">
+      <option value="">Усі джерела</option>
+    </select>
+  </div>
+  <div class="sep"></div>
+  <div class="period-btns" id="periodBtns">
+    <button data-p="today">Сьогодні</button>
+    <button data-p="yesterday">Вчора</button>
+    <button data-p="week" class="active">7 днів</button>
+    <button data-p="month">30 днів</button>
+    <button data-p="quarter">Квартал</button>
+    <button data-p="custom">Довільний</button>
+  </div>
+  <div id="customDates" style="display:none;gap:6px;align-items:center;display:none">
+    <input type="date" id="dateFrom">
+    <span style="color:var(--muted)">—</span>
+    <input type="date" id="dateTo">
+    <button id="applyDates" style="background:var(--accent);border:none;color:#fff;padding:6px 14px;border-radius:6px;cursor:pointer;font-size:13px">Застосувати</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" data-tab="b1">📈 Блок 1 · Історична воронка</div>
+  <div class="tab" data-tab="b2">📊 Блок 2 · Поточний стан</div>
+  <div class="tab" data-tab="b3">⚡ Блок 3 · Активність за період</div>
+  <div class="tab" data-tab="b4">🌐 Блок 4 · Аналітика по джерелах</div>
+</div>
+
+<div class="main">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       BLOCK 1 — Historical Funnel
+  ═════════════════════════════════════════════════════════════ -->
+  <div class="block active" id="b1">
+    <div class="hint">
+      <b>Логіка блоку:</b> показані кандидати, чия заявка була <b>створена у вибраному періоді</b>.
+      Для кожного етапу відображається: скільки з них досягли цього етапу, скільки отримали відмову, конверсія між етапами.
+    </div>
+
+    <div class="stat-row" id="b1Stats"></div>
+
+    <div class="section-title">Воронка по етапах <small id="b1Period"></small></div>
+    <div class="funnel-wrap">
+      <table class="funnel-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Етап</th>
+            <th>Увійшло</th>
+            <th>Відмов на цьому етапі</th>
+            <th>Пройшли далі / залишились</th>
+            <th>Конверсія до наступного</th>
+            <th style="min-width:200px">Візуалізація</th>
+          </tr>
+        </thead>
+        <tbody id="b1Tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       BLOCK 2 — Current State
+  ═════════════════════════════════════════════════════════════ -->
+  <div class="block" id="b2">
+    <div class="hint">
+      Фактичне положення <b>всіх кандидатів</b> прямо зараз (не фільтрується за датою).
+      Фільтри по вакансії та рекрутеру — активні.
+    </div>
+
+    <div class="stat-row" id="b2Stats"></div>
+
+    <div class="grid2">
+      <div class="card">
+        <div class="section-title">Активні кандидати по етапах</div>
+        <div id="b2ActiveStages"></div>
+      </div>
+      <div class="card">
+        <div class="section-title">Відмови по етапах</div>
+        <div id="b2RejectStages"></div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px">
+      <div class="section-title">Всі етапи (повна картина)</div>
+      <div class="funnel-wrap">
+        <table class="funnel-table">
+          <thead>
+            <tr>
+              <th>Етап</th>
+              <th>Кандидатів зараз</th>
+              <th>% від загального</th>
+              <th style="min-width:200px">Бар</th>
+            </tr>
+          </thead>
+          <tbody id="b2Tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       BLOCK 3 — Activity
+  ═════════════════════════════════════════════════════════════ -->
+  <div class="block" id="b3">
+    <div class="hint">
+      <b>Активність за вибраний період:</b> кандидати, чий запис був змінений у цьому проміжку
+      (переміщення між етапами фіксується через дату оновлення).
+      Новий кандидат = запис <i>створений</i> у цьому періоді.
+    </div>
+
+    <div class="stat-row" id="b3Stats"></div>
+
+    <div class="section-title">Активність по рекрутерах</div>
+    <div class="rec-grid" id="b3RecCards"></div>
+
+    <div class="section-title">Деталізація по етапах <small>(кандидати переміщені/оновлені за період)</small></div>
+    <div class="funnel-wrap">
+      <table class="act-table">
+        <thead>
+          <tr>
+            <th>Етап</th>
+            <th>Кількість дій</th>
+            <th>у т.ч. нових</th>
+            <th style="min-width:200px">Бар</th>
+          </tr>
+        </thead>
+        <tbody id="b3Tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       BLOCK 4 — Source Analytics
+  ═════════════════════════════════════════════════════════════ -->
+  <div class="block" id="b4">
+    <div class="hint">
+      Аналіз по <b>джерелах кандидатів</b> за вибраний період (дата входу в систему).
+      Показує ефективність кожного джерела: кількість, конверсію до ключових етапів, відсоток відмов.
+    </div>
+
+    <div class="stat-row" id="b4Stats"></div>
+
+    <div class="section-title">Джерела кандидатів</div>
+    <div class="funnel-wrap">
+      <table class="src-table">
+        <thead>
+          <tr>
+            <th>Джерело</th>
+            <th>Кандидатів</th>
+            <th>% від загального</th>
+            <th>Contacted+</th>
+            <th>Pré-screen+</th>
+            <th>HR screen+</th>
+            <th>Hired</th>
+            <th>Відмов</th>
+            <th>Конверсія (до hired)</th>
+          </tr>
+        </thead>
+        <tbody id="b4Tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="margin-top:24px">
+      <div class="section-title">Розподіл по джерелах (топ 10)</div>
+      <div id="b4BarChart" style="padding:8px 0"></div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+
+<script>
+// ─── INJECTED DATA ──────────────────────────────────────────────────────────
+__FUNNEL_DATA__
+
+// ─── HELPERS ───────────────────────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+
+function fmt(n){ return n == null ? '—' : n.toLocaleString('uk') }
+function pct(a,b){ return b === 0 ? '—' : (a/b*100).toFixed(1)+'%' }
+function pctNum(a,b){ return b === 0 ? 0 : Math.round(a/b*100) }
+
+// ─── DATE HELPERS ───────────────────────────────────────────────────────────
+function today(){ return new Date().toISOString().slice(0,10) }
+function daysAgo(n){
+  const d = new Date(); d.setDate(d.getDate()-n);
+  return d.toISOString().slice(0,10);
+}
+function quarterStart(){
+  const d = new Date();
+  const qMonth = Math.floor(d.getMonth()/3)*3;
+  return new Date(d.getFullYear(), qMonth, 1).toISOString().slice(0,10);
+}
+
+let periodFrom = daysAgo(7), periodTo = today();
+
+function setPeriod(p){
+  const t = today();
+  if(p==='today'){     periodFrom=t; periodTo=t; }
+  else if(p==='yesterday'){ const y=daysAgo(1); periodFrom=y; periodTo=y; }
+  else if(p==='week'){  periodFrom=daysAgo(6); periodTo=t; }
+  else if(p==='month'){ periodFrom=daysAgo(29); periodTo=t; }
+  else if(p==='quarter'){ periodFrom=quarterStart(); periodTo=t; }
+  // custom: handled separately
+}
+
+// ─── PIPELINE STAGE LOGIC ──────────────────────────────────────────────────
+// Build a unified stage order across all loaded vacancies
+// We identify "main" stages (non-reject) by rej=false
+
+// For a given set of apps (filtered), determine the pipeline stages to show.
+// If one vacancy selected — use its stages. If all — merge common stages by name.
+function getStages(vacId){
+  if(vacId){
+    const v = VACS.find(x=>x.id==vacId);
+    return v ? v.stages.slice().sort((a,b)=>a.pos-b.pos) : [];
+  }
+  // Merge stages from all vacancies: union by name, keep order by max pos
+  const byName = {};
+  for(const v of VACS){
+    for(const s of v.stages){
+      if(!byName[s.name] || byName[s.name].pos > s.pos){
+        byName[s.name] = s;
+      }
+    }
+  }
+  return Object.values(byName).sort((a,b)=>a.pos-b.pos);
+}
+
+function isReject(sn){
+  if(!sn) return false;
+  const l = sn.toLowerCase();
+  return l.includes('reject') || l.includes('відмов') || l.includes('disqualif') || l.includes('offer reject') || l.includes('polygraph reject');
+}
+
+// Given the MAIN flow stages (sorted by pos), find the reject stage that
+// immediately follows main stage at position P (before the next main stage).
+// Returns reject stage name(s) associated with mainPos.
+function getRejectStagesFor(mainStage, allStages){
+  const nextMainPos = (() => {
+    let found = false;
+    for(const s of allStages){
+      if(s.id === mainStage.id){ found=true; continue; }
+      if(found && !s.rej) return s.pos;
+    }
+    return Infinity;
+  })();
+  return allStages.filter(s => s.rej && s.pos > mainStage.pos && s.pos < nextMainPos);
+}
+
+// ─── FILTER APPS ───────────────────────────────────────────────────────────
+function filterApps(useDateField, {vacId, recId, srcId}={}){
+  const fi = periodFrom, to = periodTo;
+  return APPS.filter(a => {
+    const d = useDateField==='ua' ? a.ua : a.ca;
+    if(d < fi || d > to) return false;
+    if(vacId && a.vid != vacId) return false;
+    if(recId && a.rec !== recId) return false;
+    if(srcId && a.src !== srcId) return false;
+    return true;
+  });
+}
+
+function globalFilters(){
+  return {
+    vacId: $('gVac').value || null,
+    recId: $('gRec').value || null,
+    srcId: $('gSrc').value || null,
+  };
+}
+
+// ─── RENDER BLOCK 1 ─────────────────────────────────────────────────────────
+function renderB1(){
+  const {vacId, recId, srcId} = globalFilters();
+  const apps = filterApps('ca', {vacId, recId, srcId});
+  const allStages = getStages(vacId);
+  const mainStages = allStages.filter(s=>!s.rej);
+
+  // build stage_pos map for quick lookup
+  const stagePosMap = {}; // stage_name → {pos, rej}
+  for(const s of allStages) stagePosMap[s.name] = s;
+
+  // Get position of each application's current stage
+  const getPos = a => {
+    // lookup by stage id first
+    const s = allStages.find(x=>x.id===a.sid);
+    return s ? s.pos : (a.sp || 0);
+  };
+  const getRej = a => {
+    const s = allStages.find(x=>x.id===a.sid);
+    return s ? s.rej : (a.sr===1);
+  };
+
+  const total = apps.length;
+  const hired = apps.filter(a=>a.sn && a.sn.toLowerCase().includes('hired')).length;
+  const rejected = apps.filter(a=>getRej(a)).length;
+  const active = apps.filter(a=>!getRej(a) && !(a.sn||'').toLowerCase().includes('hired')).length;
+
+  $('b1Stats').innerHTML = `
+    <div class="stat-card accent"><div class="label">Увійшло у воронку</div><div class="value">${fmt(total)}</div><div class="sub">за вибраний період</div></div>
+    <div class="stat-card green"><div class="label">Hired</div><div class="value">${fmt(hired)}</div><div class="sub">${pct(hired,total)} конверсія</div></div>
+    <div class="stat-card red"><div class="label">Відмов</div><div class="value">${fmt(rejected)}</div><div class="sub">${pct(rejected,total)}</div></div>
+    <div class="stat-card orange"><div class="label">В процесі</div><div class="value">${fmt(active)}</div><div class="sub">ще активні</div></div>
+  `;
+
+  $('b1Period').textContent = `${periodFrom} — ${periodTo}`;
+
+  if(total===0){
+    $('b1Tbody').innerHTML = `<tr><td colspan="7"><div class="empty"><div class="icon">🔍</div>Немає кандидатів за вибраний період</div></td></tr>`;
+    return;
+  }
+
+  let rows = '';
+  let prevEntered = total;
+
+  for(let i=0; i<mainStages.length; i++){
+    const st = mainStages[i];
+    const rejStages = getRejectStagesFor(st, allStages);
+    const rejNames = new Set(rejStages.map(r=>r.name));
+    const rejIds = new Set(rejStages.map(r=>r.id));
+
+    // Entered = apps whose current position >= this stage pos (they reached here or beyond)
+    const entered = apps.filter(a => getPos(a) >= st.pos).length;
+
+    // Rejected at this stage = at one of the reject stages for this main stage
+    const rejCount = apps.filter(a => rejIds.has(a.sid) || rejNames.has(a.sn)).length;
+
+    // Next main stage
+    const nextMain = mainStages[i+1];
+    const passedTo = nextMain
+      ? apps.filter(a => getPos(a) >= nextMain.pos).length
+      : (st.name.toLowerCase().includes('hired') ? entered : 0);
+
+    const convPct = prevEntered > 0 ? Math.round(entered/prevEntered*100) : 100;
+    const barW = total > 0 ? Math.round(entered/total*100) : 0;
+    const rejBarW = total > 0 ? Math.round(rejCount/total*100) : 0;
+
+    const convColor = convPct >= 60 ? 'var(--green)' : convPct >= 30 ? 'var(--orange)' : 'var(--red)';
+    const isHired = st.name.toLowerCase().includes('hired');
+
+    rows += `<tr>
+      <td style="color:var(--muted);font-size:12px">${i+1}</td>
+      <td class="stage-name">${st.name}${isHired ? ' 🎉' : ''}</td>
+      <td><span class="num">${fmt(entered)}</span></td>
+      <td>${rejCount > 0 ? `<span class="badge badge-red">${fmt(rejCount)}</span>` : '<span style="color:var(--muted)">0</span>'}</td>
+      <td>${nextMain ? `<span style="color:var(--accent2);font-weight:600">${fmt(passedTo)}</span>` : `<span style="color:var(--muted)">фінальний</span>`}</td>
+      <td class="conv" style="color:${i===0?'var(--muted)':convColor}">${i===0 ? '—' : convPct+'%'}</td>
+      <td class="bar-cell">
+        <div class="bar-bg" style="position:relative;height:10px">
+          <div class="bar-fill bar-main" style="width:${barW}%;position:absolute;top:0;left:0;opacity:.85"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:3px">
+          <span style="font-size:10px;color:var(--muted)">${barW}%</span>
+          ${rejBarW>0?`<span style="font-size:10px;color:var(--red)">❌ ${rejBarW}%</span>`:''}
+        </div>
+      </td>
+    </tr>`;
+    if(i>0) prevEntered = entered;
+    else prevEntered = total;
+  }
+
+  $('b1Tbody').innerHTML = rows || `<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px">Немає даних</td></tr>`;
+}
+
+// ─── RENDER BLOCK 2 ─────────────────────────────────────────────────────────
+function renderB2(){
+  const {vacId, recId, srcId} = globalFilters();
+  // Block 2 uses ALL apps (no date filter), only vacancy/recruiter filter
+  const apps = APPS.filter(a => {
+    if(vacId && a.vid != vacId) return false;
+    if(recId && a.rec !== recId) return false;
+    if(srcId && a.src !== srcId) return false;
+    return true;
+  });
+  const allStages = getStages(vacId);
+  const total = apps.length;
+  const hired = apps.filter(a=>(a.sn||'').toLowerCase().includes('hired')).length;
+  const rejected = apps.filter(a=>a.sr===1).length;
+  const active = apps.filter(a=>a.sr===0 && !(a.sn||'').toLowerCase().includes('hired')).length;
+
+  $('b2Stats').innerHTML = `
+    <div class="stat-card accent"><div class="label">Всього кандидатів</div><div class="value">${fmt(total)}</div></div>
+    <div class="stat-card green"><div class="label">Hired</div><div class="value">${fmt(hired)}</div><div class="sub">${pct(hired,total)}</div></div>
+    <div class="stat-card red"><div class="label">Відмов</div><div class="value">${fmt(rejected)}</div></div>
+    <div class="stat-card orange"><div class="label">Активних</div><div class="value">${fmt(active)}</div></div>
+  `;
+
+  // Stage counts
+  const stageCnt = {};
+  for(const a of apps){
+    const key = a.sn || 'Невідомо';
+    stageCnt[key] = (stageCnt[key]||0)+1;
+  }
+
+  // Sort by stage position
+  const stageOrder = {};
+  for(const s of allStages) stageOrder[s.name] = s.pos;
+
+  const sorted = Object.entries(stageCnt).sort((a,b)=>(stageOrder[a[0]]||999)-(stageOrder[b[0]]||999));
+  const maxCnt = Math.max(...sorted.map(x=>x[1]),1);
+
+  // Full table
+  $('b2Tbody').innerHTML = sorted.map(([name, cnt])=>{
+    const isRej = isReject(name);
+    const barW = Math.round(cnt/maxCnt*100);
+    const color = isRej ? 'var(--red)' : (name.toLowerCase().includes('hired') ? 'var(--green)' : 'var(--accent)');
+    return `<tr>
+      <td style="color:${isRej?'var(--red)':'#fff'}">${name}</td>
+      <td><span class="num">${fmt(cnt)}</span></td>
+      <td>${pct(cnt,total)}</td>
+      <td class="bar-cell">
+        <div class="bar-bg"><div class="bar-fill" style="width:${barW}%;background:${color}"></div></div>
+      </td>
+    </tr>`;
+  }).join('');
+
+  // Active stages
+  const activeRows = sorted.filter(([n])=>!isReject(n)&&!n.toLowerCase().includes('hired'));
+  const maxActive = Math.max(...activeRows.map(x=>x[1]),1);
+  $('b2ActiveStages').innerHTML = activeRows.map(([name,cnt])=>`
+    <div class="cur-stage-row">
+      <div class="cur-stage-name">${name}</div>
+      <div class="cur-stage-bar-wrap"><div class="cur-stage-bar" style="width:${Math.round(cnt/maxActive*100)}%"></div></div>
+      <div class="cur-stage-cnt" style="color:var(--accent2)">${cnt}</div>
+    </div>
+  `).join('') || '<div class="empty" style="padding:24px">Немає даних</div>';
+
+  // Reject stages
+  const rejRows = sorted.filter(([n])=>isReject(n));
+  const maxRej = Math.max(...rejRows.map(x=>x[1]),1);
+  $('b2RejectStages').innerHTML = rejRows.map(([name,cnt])=>`
+    <div class="cur-stage-row">
+      <div class="cur-stage-name" style="color:var(--red)">${name}</div>
+      <div class="cur-stage-bar-wrap"><div class="cur-stage-bar" style="width:${Math.round(cnt/maxRej*100)}%;background:var(--red)"></div></div>
+      <div class="cur-stage-cnt" style="color:var(--red)">${cnt}</div>
+    </div>
+  `).join('') || '<div style="color:var(--muted);padding:24px;text-align:center">Немає відмов</div>';
+}
+
+// ─── RENDER BLOCK 3 ─────────────────────────────────────────────────────────
+function renderB3(){
+  const {vacId, recId, srcId} = globalFilters();
+
+  // Activity = updated in period
+  const updatedApps = APPS.filter(a => {
+    if(a.ua < periodFrom || a.ua > periodTo) return false;
+    if(vacId && a.vid != vacId) return false;
+    if(srcId && a.src !== srcId) return false;
+    return true;
+  });
+
+  // New entries = created in period
+  const newApps = APPS.filter(a => {
+    if(a.ca < periodFrom || a.ca > periodTo) return false;
+    if(vacId && a.vid != vacId) return false;
+    if(srcId && a.src !== srcId) return false;
+    return true;
+  });
+
+  const totalAct = updatedApps.length;
+  const newCount = newApps.length;
+  const rejAct = updatedApps.filter(a=>a.sr===1).length;
+
+  $('b3Stats').innerHTML = `
+    <div class="stat-card accent"><div class="label">Всього дій за період</div><div class="value">${fmt(totalAct)}</div><div class="sub">змінених записів</div></div>
+    <div class="stat-card green"><div class="label">Нових кандидатів</div><div class="value">${fmt(newCount)}</div><div class="sub">вперше додані</div></div>
+    <div class="stat-card red"><div class="label">Відмов за період</div><div class="value">${fmt(rejAct)}</div></div>
+    <div class="stat-card blue"><div class="label">Активних оновлень</div><div class="value">${fmt(totalAct-rejAct)}</div><div class="sub">просунулись вперед</div></div>
+  `;
+
+  // Recruiter cards (filter by recId for detail, or show all)
+  const recFilter = recId ? [recId] : [...new Set(updatedApps.map(a=>a.rec).filter(Boolean))];
+
+  $('b3RecCards').innerHTML = recFilter.slice(0,20).map(rec => {
+    const rApps = updatedApps.filter(a=>a.rec===rec);
+    const rNew = newApps.filter(a=>a.rec===rec).length;
+    const rRej = rApps.filter(a=>a.sr===1).length;
+    const rFwd = rApps.filter(a=>a.sr===0&&!(a.sn||'').toLowerCase().includes('hired')).length;
+    const rHired = rApps.filter(a=>(a.sn||'').toLowerCase().includes('hired')).length;
+    const shortName = rec.split(' ').map((w,i)=>i===0?w:w[0]+'.').join(' ');
+    return `<div class="rec-card">
+      <div class="rec-name" title="${rec}">${shortName}</div>
+      <div class="rec-stats">
+        <div class="rec-stat"><div class="n blue">${rApps.length}</div><div class="l">дій</div></div>
+        <div class="rec-stat"><div class="n">${rNew}</div><div class="l">нових</div></div>
+        <div class="rec-stat"><div class="n red">${rRej}</div><div class="l">відмов</div></div>
+        ${rHired>0?`<div class="rec-stat"><div class="n green">${rHired}</div><div class="l">hired</div></div>`:''}
+      </div>
+    </div>`;
+  }).join('') || '<div style="color:var(--muted)">Немає активності</div>';
+
+  // Stage breakdown
+  const allStages = getStages(vacId);
+  const stageOrder = {};
+  for(const s of allStages) stageOrder[s.name] = s.pos;
+
+  const stageCnt = {};
+  const newStageCnt = {};
+  for(const a of updatedApps){
+    const key = a.sn || 'Невідомо';
+    stageCnt[key] = (stageCnt[key]||0)+1;
+  }
+  for(const a of newApps){
+    const key = a.sn || 'Невідомо';
+    newStageCnt[key] = (newStageCnt[key]||0)+1;
+  }
+
+  const sorted = Object.entries(stageCnt).sort((a,b)=>(stageOrder[a[0]]||999)-(stageOrder[b[0]]||999));
+  const maxCnt = Math.max(...sorted.map(x=>x[1]),1);
+
+  $('b3Tbody').innerHTML = sorted.map(([name, cnt])=>{
+    const isRej = isReject(name);
+    const nw = newStageCnt[name] || 0;
+    const barW = Math.round(cnt/maxCnt*100);
+    const color = isRej ? 'var(--red)' : (name.toLowerCase().includes('hired')?'var(--green)':'var(--accent)');
+    return `<tr>
+      <td style="color:${isRej?'var(--red)':name.toLowerCase().includes('hired')?'var(--green)':'#fff'}">${name}</td>
+      <td><span class="act-num">${fmt(cnt)}</span></td>
+      <td>${nw>0?`<span class="badge badge-green">+${nw}</span>`:'<span style="color:var(--muted)">—</span>'}</td>
+      <td class="bar-cell">
+        <div class="bar-bg"><div class="bar-fill" style="width:${barW}%;background:${color}"></div></div>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="4" style="text-align:center;color:var(--muted);padding:24px">Немає активності за вибраний період</td></tr>`;
+}
+
+// ─── RENDER BLOCK 4 ─────────────────────────────────────────────────────────
+function renderB4(){
+  const {vacId, recId, srcId} = globalFilters();
+  const apps = filterApps('ca', {vacId, recId});
+
+  const allStages = getStages(vacId);
+  const stagePos = {};
+  for(const s of allStages) stagePos[s.name] = s.pos;
+
+  // Find position of key stages
+  const findPos = keyword => {
+    const s = allStages.find(x=>x.name.toLowerCase().includes(keyword.toLowerCase()));
+    return s ? s.pos : 3; // fallback
+  };
+
+  const contactedPos  = findPos('contact');
+  const prescreenPos  = findPos('pre-screen');
+  const hrPos         = findPos('hr screen');
+  const hiredPos      = findPos('hired');
+
+  const getPos = a => {
+    const s = allStages.find(x=>x.id===a.sid);
+    return s ? s.pos : (a.sp||0);
+  };
+
+  const srcMap = {};
+  for(const a of apps){
+    const src = a.src || 'Не вказано';
+    if(!srcMap[src]) srcMap[src] = {total:0, contacted:0, prescreen:0, hr:0, hired:0, rejected:0};
+    const m = srcMap[src];
+    m.total++;
+    const p = getPos(a);
+    if(p >= contactedPos)  m.contacted++;
+    if(p >= prescreenPos)  m.prescreen++;
+    if(p >= hrPos)         m.hr++;
+    if(p >= hiredPos)      m.hired++;
+    if(a.sr===1)           m.rejected++;
+  }
+
+  const sorted = Object.entries(srcMap).sort((a,b)=>b[1].total-a[1].total);
+  const grandTotal = apps.length;
+
+  const top10 = sorted.slice(0,10);
+  const top10max = Math.max(...top10.map(x=>x[1].total),1);
+
+  $('b4Stats').innerHTML = `
+    <div class="stat-card accent"><div class="label">Джерел</div><div class="value">${sorted.length}</div></div>
+    <div class="stat-card"><div class="label">Кандидатів (всього)</div><div class="value">${fmt(grandTotal)}</div></div>
+    <div class="stat-card green"><div class="label">Найкраще джерело</div>
+      <div class="value" style="font-size:16px">${sorted[0]?sorted[0][0]:'—'}</div>
+      <div class="sub">${sorted[0]?fmt(sorted[0][1].total)+' кандидатів':''}</div>
+    </div>
+    <div class="stat-card green"><div class="label">Найвища конверсія</div>
+      <div class="value" style="font-size:16px">${(() => {
+        const best = sorted.filter(([,m])=>m.total>=3).sort((a,b)=>b[1].hired/b[1].total - a[1].hired/a[1].total)[0];
+        return best ? best[0] : '—';
+      })()}</div>
+    </div>
+  `;
+
+  $('b4Tbody').innerHTML = sorted.map(([src, m])=>{
+    const barW = Math.round(m.total/Math.max(sorted[0][1].total,1)*100);
+    const hiredPct = pct(m.hired, m.total);
+    return `<tr>
+      <td style="font-weight:500">${src}</td>
+      <td><span class="num">${fmt(m.total)}</span></td>
+      <td>
+        <div class="pct-bar">
+          <div class="bar"><div class="fill" style="width:${Math.round(m.total/grandTotal*100)}%"></div></div>
+          <span class="pct-num">${pct(m.total,grandTotal)}</span>
+        </div>
+      </td>
+      <td>${pct(m.contacted,m.total)}</td>
+      <td>${pct(m.prescreen,m.total)}</td>
+      <td>${pct(m.hr,m.total)}</td>
+      <td>${m.hired > 0 ? `<span class="badge badge-green">${m.hired}</span>` : '—'}</td>
+      <td>${m.rejected > 0 ? `<span class="badge badge-red">${m.rejected}</span>` : '—'}</td>
+      <td style="font-weight:600;color:${m.hired>0?'var(--green)':'var(--muted)'}">${hiredPct}</td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="9" style="text-align:center;color:var(--muted);padding:24px">Немає даних</td></tr>`;
+
+  // Mini bar chart
+  $('b4BarChart').innerHTML = top10.map(([src,m])=>`
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+      <div style="width:160px;font-size:12px;color:var(--text);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="${src}">${src}</div>
+      <div style="flex:1;background:rgba(255,255,255,.06);height:20px;border-radius:4px;overflow:hidden">
+        <div style="height:20px;background:linear-gradient(90deg,var(--accent),var(--accent2));width:${Math.round(m.total/top10max*100)}%;border-radius:4px;display:flex;align-items:center;padding-left:8px">
+          <span style="font-size:11px;color:#fff;white-space:nowrap">${m.total}</span>
+        </div>
+      </div>
+      ${m.hired>0?`<span style="font-size:11px;color:var(--green);min-width:50px">✓ ${m.hired} hired</span>`:'<span style="min-width:50px"></span>'}
+    </div>
+  `).join('');
+}
+
+// ─── POPULATE FILTERS ──────────────────────────────────────────────────────
+function populateFilters(){
+  const vacSel = $('gVac');
+  vacSel.innerHTML = '<option value="">Усі вакансії</option>';
+  VACS.sort((a,b)=>a.title.localeCompare(b.title,'uk')).forEach(v=>{
+    const st = v.state!=='opened' ? ` (${v.state})` : '';
+    vacSel.innerHTML += `<option value="${v.id}">${v.title}${st}</option>`;
+  });
+
+  const recs = [...new Set(APPS.map(a=>a.rec).filter(Boolean))].sort();
+  const recSel = $('gRec');
+  recSel.innerHTML = '<option value="">Усі рекрутери</option>';
+  recs.forEach(r => recSel.innerHTML += `<option value="${r}">${r}</option>`);
+
+  const srcs = [...new Set(APPS.map(a=>a.src).filter(Boolean))].sort();
+  const srcSel = $('gSrc');
+  srcSel.innerHTML = '<option value="">Усі джерела</option>';
+  srcs.forEach(s => srcSel.innerHTML += `<option value="${s}">${s}</option>`);
+}
+
+// ─── RENDER ALL ─────────────────────────────────────────────────────────────
+function renderAll(){
+  renderB1(); renderB2(); renderB3(); renderB4();
+}
+
+// ─── EVENT LISTENERS ────────────────────────────────────────────────────────
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+    document.querySelectorAll('.block').forEach(b=>b.classList.remove('active'));
+    tab.classList.add('active');
+    $(tab.dataset.tab).classList.add('active');
+  });
+});
+
+document.querySelectorAll('.period-btns button').forEach(btn => {
+  btn.addEventListener('click', ()=>{
+    if(btn.dataset.p === 'custom'){
+      const cd = $('customDates');
+      cd.style.display = cd.style.display==='none'||!cd.style.display ? 'flex' : 'none';
+      return;
+    }
+    document.querySelectorAll('.period-btns button').forEach(b=>b.classList.remove('active'));
+    btn.classList.add('active');
+    $('customDates').style.display='none';
+    setPeriod(btn.dataset.p);
+    renderAll();
+  });
+});
+
+$('applyDates').addEventListener('click', ()=>{
+  const f = $('dateFrom').value, t = $('dateTo').value;
+  if(f && t && f <= t){
+    periodFrom = f; periodTo = t;
+    document.querySelectorAll('.period-btns button').forEach(b=>b.classList.remove('active'));
+    $('customDates').querySelector('button')?.classList.add('active');
+    renderAll();
+  }
+});
+
+['gVac','gRec','gSrc'].forEach(id => $(id).addEventListener('change', renderAll));
+
+// ─── INIT ────────────────────────────────────────────────────────────────────
+populateFilters();
+setPeriod('week');
+renderAll();
+</script>
+</body>
+</html>
