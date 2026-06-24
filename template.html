@@ -368,37 +368,33 @@ function buildFunnel(vacId) {
   const vac = VACS.find(v=>v.id===vacId);
   if (!vac) return;
 
-  // Classic funnel: filter by created_at (added in period), show where they are NOW
-  const apps = filteredApps(vacId, 'added');
+  // Filter by updated_at (хто рухався у воронці за цей період)
+  const apps = filteredApps(vacId, 'active');
   funnelAppsCache = apps;
 
   const total    = apps.length;
   const hired    = apps.filter(a=>isHired(a.sn)).length;
   const rejected = apps.filter(a=>isReject(a.sn)).length;
-  const inProcess = total - hired - rejected;
 
-  // Build stage position map from pipeline definition
+  // Всі стадії pipeline по порядку + ті що є в даних але не в pipeline
   const defStages = (vac.stages||[]).slice().sort((a,b)=>a.pos-b.pos);
-  const stagePosMap = {}; // stageName → position
-  defStages.forEach(s => { stagePosMap[s.name] = s.pos; });
-
-  // For each app, get its stage position (fallback: 9999 = unknown)
-  const appPos = (a) => stagePosMap[a.sn] ?? 9999;
-
-  // Show ALL stages in pipeline order, each with count of candidates currently on it
   const stageCounts = {};
   apps.forEach(a => { stageCounts[a.sn] = (stageCounts[a.sn]||0)+1; });
-  const maxCount = Math.max(...Object.values(stageCounts).concat([1]));
 
+  const defNames = new Set(defStages.map(s=>s.name));
+  const extraStages = Object.keys(stageCounts).filter(n=>!defNames.has(n)).map(n=>({name:n, pos:9999}));
+  const allStages = [...defStages, ...extraStages];
+
+  const maxCount = Math.max(...Object.values(stageCounts).concat([1]));
   let colorIdx = 0;
-  const rows = defStages.map(stage => {
+
+  const rows = allStages.map(stage => {
     const cnt   = stageCounts[stage.name] || 0;
     const pct   = total > 0 ? Math.round((cnt / total) * 100) : 0;
-    const barW  = maxCount > 0 ? Math.round((cnt / maxCount) * 100) : 0;
+    const barW  = Math.round((cnt / maxCount) * 100);
     const isRej = isReject(stage.name);
     const isHir = isHired(stage.name);
     const color = isHir ? 'var(--green)' : isRej ? 'var(--red)' : stageColor(colorIdx++);
-    const opacity = isRej ? 'opacity:.8;' : '';
     if (cnt === 0) {
       return `<div class="stage-row">
         <div class="s-label empty">${stage.name}</div>
@@ -406,10 +402,10 @@ function buildFunnel(vacId) {
         <div class="s-cnt empty">0</div>
       </div>`;
     }
-    return `<div class="stage-row" style="cursor:pointer;${opacity}" onclick="showStageBreakdown('${stage.name.replace(/'/g,"\\'")}',${vacId},'exact')">
-      <div class="s-label" style="${isRej?'color:var(--red)':''}${isHir?'color:var(--green)':''}">${stage.name}</div>
+    return `<div class="stage-row" style="cursor:pointer" onclick="showStageBreakdown('${stage.name.replace(/'/g,"\\'")}',${vacId},'exact')">
+      <div class="s-label" style="${isRej?'color:var(--red)':isHir?'color:var(--green)':''}">${stage.name}</div>
       <div class="bar-wrap">
-        <div class="bar-fill" style="width:${barW}%;background:${color};${isRej?'opacity:.75':''}">
+        <div class="bar-fill" style="width:${barW}%;background:${color};${isRej?'opacity:.8':''}">
           ${barW>18?cnt:''}
         </div>
         ${barW<=18?`<span style="margin-left:4px;font-size:11px">${cnt}</span>`:''}
@@ -432,13 +428,8 @@ function buildFunnel(vacId) {
         </div>
       </div>
     </div>
-    <div class="alert-box alert-info" style="margin-bottom:14px">
-      <span>ℹ️</span>
-      <div style="font-size:11px">Класична воронка: кандидати <strong>додані за обраний період</strong> (${total}), показано скільки з них <strong>досягло кожної стадії</strong>. Кандидат на стадії "Інтерв'ю" — зарахований на всіх попередніх стадіях теж. Клікай на стадію для деталей.</div>
-    </div>
     <div class="fun-stats">
-      <div class="fs-card"><div class="fs-val" style="color:var(--accent)">${total}</div><div class="fs-lbl">Додано за період</div></div>
-      <div class="fs-card"><div class="fs-val" style="color:var(--text2)">${inProcess}</div><div class="fs-lbl">В процесі</div></div>
+      <div class="fs-card"><div class="fs-val" style="color:var(--accent)">${total}</div><div class="fs-lbl">Активних у воронці</div></div>
       <div class="fs-card"><div class="fs-val" style="color:var(--green)">${hired}</div><div class="fs-lbl">Hired</div></div>
       <div class="fs-card"><div class="fs-val" style="color:var(--red)">${rejected}</div><div class="fs-lbl">Rejected</div></div>
     </div>
